@@ -15,7 +15,7 @@ The promise is not “a lot of effects.” It is: **four closely related effects
 1. **Mac first, not merely Mac-compatible.** The app has a real menu bar, Dock behavior, drag and drop, inspectors, keyboard commands, Quick Look-friendly output, sandboxed folder access, and excellent accessibility.
 2. **Immediate by default.** After a one-time output-folder grant, a drop starts processing with the active recipe. There is no import screen, catalog, project file, or per-batch confirmation.
 3. **Photographic rather than decorative.** Grain is signal-dependent and spatially correlated. Diffusion scatters light while retaining apparent acuity. Halation redistributes exposure through the film layers. Vignetting changes exposure rather than painting translucent black over the image.
-4. **Simple on the surface, deep when invited.** Most people choose a recipe. The trailing adjustment panel exposes the underlying four effects when invited.
+4. **Simple on the surface, deep when invited.** Most people choose a recipe. The trailing adjustment panel exposes the full adjustment stack when invited.
 5. **Quietly trustworthy.** Originals are never modified, the same inputs and settings reproduce the same output, color profiles and useful metadata survive, and failed jobs explain themselves.
 6. **No fake precision.** Built-in recipes remain descriptive. Named color stocks must come from a disclosed measured or spectral negative-to-print model, identify the simulated print pairing, and be presented as simulations rather than manufacturer-endorsed profiles.
 
@@ -137,11 +137,12 @@ The primary UI exposes only:
 - Lens Blur on/off
 - Diffusion on/off
 - Halation on/off
+- Landscape Glow on/off
 - Grain on/off
 
 The inspector exposes Amount and one defining control per effect. An Advanced disclosure exposes the less common parameters. Granular ships with only three distinct starting points—Clean 120, Classic 35, and Soft 16. Save New Recipe… gives the working recipe a name; the Recipe Manager renames and deletes user recipes. Built-ins are immutable and always recoverable.
 
-All five optical Amount controls use a normalized `0.0–1.0` scale without effect-specific units. The renderer maps that common scale onto each effect’s physical or perceptual response. Existing recipes were recalculated so normalization changes their displayed numbers without changing their rendered appearance. Above the former Diffusion and Halation ceiling, the upper half progressively adds a second optical pass. Grain `0.25` is the calibrated Classic 35 amount, while `1.0` reaches four times that response.
+All effect Amount controls use a normalized `0.0–1.0` scale without effect-specific units. The renderer maps that common scale onto each effect’s physical or perceptual response. Existing recipes were recalculated so normalization changes their displayed numbers without changing their rendered appearance. Above the former Diffusion and Halation ceiling, the upper half progressively adds a second optical pass. Grain `0.25` is the calibrated Classic 35 amount, while `1.0` reaches four times that response.
 
 ### Effect-module pattern
 
@@ -159,6 +160,7 @@ Each effect follows the same compact hierarchy in pipeline order:
 | Lens Blur | Amount | Falloff | Character, RGB separation, asymmetry, direction, focus center |
 | Lens Diffusion | Amount | Bloom | Veil/Fog, Source Bias, warmth, focus center |
 | Halation | Amount | Spill Radius | Tail, Color Shift, Saturation, green leakage |
+| Landscape Glow | Amount | Glow Size | Shadow Protection, Detail |
 | Grain | Amount | Particle Size | Acutance/Crispness, size variation, chroma, tonal response, seed |
 
 This preserves the successful “one amount plus three character controls” pattern used by strong film-emulation tools without reproducing their oversized rotary controls. Linear native sliders, editable values, arrow-key adjustment, double-click Reset, and sensible units are faster and more precise on a Mac. A restrained per-effect accent may appear in the icon and slider fill, but the inspector remains a system surface rather than four custom dashboards.
@@ -232,16 +234,18 @@ flowchart LR
     A["Decode + orient"] --> B["Color-match to linear float"]
     B --> C["Film tone + color"]
     C --> D["Spotlight / optical vignette"]
-    D --> E["Lens diffusion"]
-    E --> F["Film-layer halation"]
-    F --> G["Stochastic grain population"]
-    G --> H["Output color transform + dither"]
-    H --> I["Atomic encode + metadata"]
+    D --> E["Lens blur"]
+    E --> F["Lens diffusion"]
+    F --> G["Film-layer halation"]
+    G --> H["Landscape glow"]
+    H --> I["Stochastic grain population"]
+    I --> J["Output color transform + dither"]
+    J --> K["Atomic encode + metadata"]
 ```
 
-Film tone first establishes exposure, contrast, and color balance in a scene-linear working space. Light shaping then precedes the image-forming effects because it changes the exposure entering the optical/film model. Lens diffusion comes before halation: a physical diffusion filter sits in the optical path, and its scattered light subsequently reaches the emulsion and can halate. Halation then redistributes exposure within the film structure. Grain is the stochastic density record of the resulting exposure.
+Film tone first establishes exposure, contrast, and color balance in a scene-linear working space. Light shaping then precedes the image-forming effects because it changes the exposure entering the optical/film model. Lens diffusion comes before halation: a physical diffusion filter sits in the optical path, and its scattered light subsequently reaches the emulsion and can halate. Halation then redistributes exposure within the film structure. Landscape Glow is a creative finishing treatment rather than an acquisition-side optical effect, so it follows halation. Grain remains last so its fine structure is not blurred by the glow.
 
-The fixed, acquisition-faithful order is therefore **film tone → vignette → lens blur → lens diffusion → halation → grain**. Granular should not expose arbitrary effect reordering; that adds editor-like complexity and makes recipes harder to calibrate.
+The fixed order is therefore **film tone → vignette → lens blur → lens diffusion → halation → landscape glow → grain**. Granular should not expose arbitrary effect reordering; that adds editor-like complexity and makes recipes harder to calibrate.
 
 ### Lens blur and aberration
 
@@ -311,6 +315,12 @@ O[c] = (1 - s[c]) · I[c] + s[c] · (K[c] * I[c])
 - A recipe may add a very soft exposure-response curve to represent a particular film structure, but it must not create a keyed outline or tint the core of every highlight.
 
 Radius is stored relative to the virtual film gate and output dimensions, not as an arbitrary export-pixel count. The normal UI exposes Amount and Spill Radius; Advanced adds Tail, Color Shift, Saturation, and Green Leakage.
+
+### Landscape glow
+
+Landscape Glow is an Orton-style finishing treatment, not another optical-diffusion mode. Two broad, dimension-relative blur scales form a luminous body and atmospheric tail. A softly lifted luminance response favors upper midtones and highlights, while a continuous shadow gate anchors dark foliage and foreground detail. The shoulder remains ordered near white so skies glow without flattening into a clipped field.
+
+The source image is never globally mixed toward a blurred copy. Fine luminance detail remains intact and the Detail control adds a restrained high-frequency accent, while a separate highlight-only emission layer allows low-frequency color to spread through luminous regions. A subtle stops-domain S-curve adds depth without becoming a second general-purpose contrast adjustment. Processing remains in extended-linear Rec.2020, compresses out-of-range chroma toward neutral, and handles blurred samples in an alpha-aware form. The normal UI exposes Amount and Glow Size; Advanced adds Shadow Protection and Detail.
 
 ### Spotlight and vignette
 
@@ -566,7 +576,7 @@ The first video milestone should be a constrained SDR workflow:
 - video support in both Instant mode and watched folders; and
 - deterministic, time-aware grain derived from the recipe seed and frame timestamp, so grain changes naturally between frames without becoming frozen or flickering digitally.
 
-AVFoundation should supply frame decoding, timing, audio passthrough, and encoding. Each decoded frame then travels through the existing fixed pipeline—Film Tone → Spotlight → Diffusion → Halation → Grain—using a render context that includes presentation time or frame index. Preview and export must reproduce the same temporal grain sequence.
+AVFoundation should supply frame decoding, timing, audio passthrough, and encoding. Each decoded frame then travels through the existing fixed pipeline—Film Tone → Spotlight → Lens Blur → Diffusion → Halation → Landscape Glow → Grain—using a render context that includes presentation time or frame index. Preview and export must reproduce the same temporal grain sequence.
 
 A later milestone may add ProRes, alpha, HDR and wide-color preservation, variable-frame-rate footage, multiple audio tracks, richer metadata handling, and full-quality real-time 4K playback. These capabilities should not expand the first video milestone. The constrained version is estimated at roughly one to two focused engineering weeks; a polished professional implementation is more plausibly four to eight weeks, with performance and color-management work carrying most of the risk.
 
@@ -577,7 +587,7 @@ A later milestone may add ProRes, alpha, HDR and wide-color preservation, variab
 | Minimum OS | macOS 26 | Native Liquid Glass without maintaining a parallel legacy visual system |
 | UI framework | SwiftUI with narrow AppKit bridges | Modern system appearance plus reliable Mac-specific file-open behavior |
 | Renderer | Core Image graph + custom Metal stochastic-grain and optical-scatter kernels | Color management, tiling, GPU execution, and custom photographic math |
-| Effect order | Film tone → spotlight/vignette → diffusion → halation → grain | Establishes tone and color before light shaping, lens optics, and film structure |
+| Effect order | Film tone → spotlight/vignette → lens blur → diffusion → halation → landscape glow → grain | Establishes tone and color before light shaping, lens optics, film structure, and creative finishing |
 | Distribution posture | Sandboxed and Mac App Store-compatible | Least privilege; user-selected folders are sufficient |
 | Watch lifetime | While Granular runs; optional Launch at Login | Honest visibility and no unnecessary daemon |
 | Adjustments UI | Stable in-window trailing panel | Enough room for live controls without triggering AppKit inspector/window constraint races during mode changes |

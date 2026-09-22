@@ -132,6 +132,7 @@ struct RecipeManagerView: View {
                     LabeledContent("Lens Blur", value: recipe.lensBlur.amount.formatted(.number.precision(.fractionLength(2))))
                     LabeledContent("Diffusion", value: recipe.diffusion.amount.formatted(.number.precision(.fractionLength(2))))
                     LabeledContent("Halation", value: recipe.halation.amount.formatted(.number.precision(.fractionLength(2))))
+                    LabeledContent("Landscape Glow", value: recipe.landscapeGlow.amount.formatted(.number.precision(.fractionLength(2))))
                     LabeledContent("Grain", value: recipe.grain.amount.formatted(.number.precision(.fractionLength(2))))
                 }
                 .font(.caption)

@@ -345,6 +345,11 @@ final class AppModel {
         schedulePreview()
     }
 
+    func resetLandscapeGlow() {
+        recipe.landscapeGlow = currentRecipe.landscapeGlow
+        schedulePreview()
+    }
+
     func resetGrain() {
         recipe.grain = currentRecipe.grain
         schedulePreview()

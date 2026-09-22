@@ -34,6 +34,8 @@ public final class FilmRenderer: @unchecked Sendable {
     private let lensChromaticKernel: CIKernel
     private let diffusionKernel: CIColorKernel
     private let halationKernel: CIColorKernel
+    private let landscapeGlowExtractionKernel: CIColorKernel
+    private let landscapeGlowKernel: CIColorKernel
     private let grainKernel: CIColorKernel
     private let stockCubeLock = NSLock()
     private var stockCubes: [FilmStockID: FilmStockCube] = [:]
@@ -63,6 +65,14 @@ public final class FilmRenderer: @unchecked Sendable {
         guard let halationKernel = CIColorKernel(source: Self.halationSource) else {
             throw FilmRendererError.kernelCompilationFailed("halation")
         }
+        guard let landscapeGlowExtractionKernel = CIColorKernel(
+            source: Self.landscapeGlowExtractionSource
+        ) else {
+            throw FilmRendererError.kernelCompilationFailed("landscape-glow source")
+        }
+        guard let landscapeGlowKernel = CIColorKernel(source: Self.landscapeGlowSource) else {
+            throw FilmRendererError.kernelCompilationFailed("landscape-glow")
+        }
         guard let grainKernel = CIColorKernel(source: Self.grainSource) else {
             throw FilmRendererError.kernelCompilationFailed("grain")
         }
@@ -75,6 +85,8 @@ public final class FilmRenderer: @unchecked Sendable {
         self.lensChromaticKernel = lensChromaticKernel
         self.diffusionKernel = diffusionKernel
         self.halationKernel = halationKernel
+        self.landscapeGlowExtractionKernel = landscapeGlowExtractionKernel
+        self.landscapeGlowKernel = landscapeGlowKernel
         self.grainKernel = grainKernel
     }
 
@@ -117,6 +129,9 @@ public final class FilmRenderer: @unchecked Sendable {
         }
         if recipe.halation.isEnabled, recipe.halation.amount != 0 {
             image = try applyHalation(image, settings: recipe.halation, extent: extent)
+        }
+        if recipe.landscapeGlow.isEnabled, recipe.landscapeGlow.amount != 0 {
+            image = try applyLandscapeGlow(image, settings: recipe.landscapeGlow, extent: extent)
         }
         // Resolve optical effects at source resolution, then generate grain on
         // the final preview grid so downsampling does not dilute its contrast.
@@ -359,6 +374,43 @@ public final class FilmRenderer: @unchecked Sendable {
             Float(settings.greenLeakage)
         ]
         guard let output = halationKernel.apply(extent: extent, arguments: arguments) else {
+            throw FilmRendererError.renderFailed
+        }
+        return output
+    }
+
+    private func applyLandscapeGlow(
+        _ image: CIImage,
+        settings: LandscapeGlowSettings,
+        extent: CGRect
+    ) throws -> CIImage {
+        let shortEdge = min(extent.width, extent.height)
+        let size = max(0, min(1, settings.glowSize))
+
+        // All scales follow the image dimensions so the frequency separation and
+        // highlight tail remain consistent across preview and export sizes.
+        let middleRadius = max(4, shortEdge * (0.0045 + 0.0135 * size))
+        let wideRadius = middleRadius * (2.25 + 1.75 * size)
+        let overall = gaussianBlur(image, radius: middleRadius * 0.72, extent: extent)
+        guard let highlightSource = landscapeGlowExtractionKernel.apply(
+            extent: extent,
+            arguments: [image]
+        ) else {
+            throw FilmRendererError.renderFailed
+        }
+        let middle = gaussianBlur(highlightSource, radius: middleRadius, extent: extent)
+        let wide = gaussianBlur(highlightSource, radius: wideRadius, extent: extent)
+
+        let arguments: [Any] = [
+            image,
+            overall,
+            middle,
+            wide,
+            Float(max(0, min(LandscapeGlowSettings.maximumAmount, settings.amount))),
+            Float(max(0, min(1, settings.shadowProtection))),
+            Float(max(0, min(1, settings.detail)))
+        ]
+        guard let output = landscapeGlowKernel.apply(extent: extent, arguments: arguments) else {
             throw FilmRendererError.renderFailed
         }
         return output
@@ -860,6 +912,112 @@ private extension FilmRenderer {
         rgb.g = mix(source.g, scattered.g, greenScatter);
         rgb.b = source.b;
         return vec4(rgb, source.a);
+    }
+    """#
+
+    static let landscapeGlowExtractionSource = #"""
+    kernel vec4 landscapeGlowSource(__sample source) {
+        const vec3 luma = vec3(0.2627002, 0.6779981, 0.0593017);
+        float alpha = source.a;
+        vec3 rgb = alpha > 0.000001
+            ? max(source.rgb / alpha, vec3(0.0))
+            : vec3(0.0);
+        float y = max(dot(rgb, luma), 0.0);
+
+        // A wide luminosity selection keeps upper midtones involved while making
+        // direct light the dominant emitter. Dark structures contribute no shadow
+        // halo to the blur, which is the main failure mode of a global Orton layer.
+        float highlightGate = smoothstep(0.14, 0.78, y);
+        float emission = highlightGate * mix(0.55, 1.0, highlightGate);
+        return vec4(rgb * emission * alpha, alpha);
+    }
+    """#
+
+    static let landscapeGlowSource = #"""
+    kernel vec4 landscapeGlow(
+        __sample source,
+        __sample overallBlur,
+        __sample middleBlur,
+        __sample wideBlur,
+        float amount,
+        float shadowProtection,
+        float detail
+    ) {
+        const vec3 luma = vec3(0.2627002, 0.6779981, 0.0593017);
+        float sourceAlpha = source.a;
+        vec3 sourceRGB = sourceAlpha > 0.000001
+            ? max(source.rgb / sourceAlpha, vec3(0.0))
+            : vec3(0.0);
+        float sourceY = max(dot(sourceRGB, luma), 0.0);
+
+        // Two highlight-only scales produce a luminous body and a long atmospheric
+        // tail. Because shadows were excluded before the blur, this layer can add
+        // light without averaging the source toward gray or creating dark halos.
+        vec4 blurredPremultiplied = mix(middleBlur, wideBlur, 0.38);
+        vec3 glowRGB = blurredPremultiplied.a > 0.000001
+            ? max(blurredPremultiplied.rgb / blurredPremultiplied.a, vec3(0.0))
+            : vec3(0.0);
+
+        float normalizedAmount = (1.0 - exp(-2.2 * clamp(amount, 0.0, 1.0)))
+            / (1.0 - exp(-2.2));
+
+        // Rebuild the image from a broad color/tonal layer plus its original
+        // high-frequency luminance residual. This is the full-frame Orton body:
+        // cohesive low-frequency color and light without sacrificing crisp detail.
+        vec3 overallRGB = overallBlur.a > 0.000001
+            ? max(overallBlur.rgb / overallBlur.a, vec3(0.0))
+            : vec3(0.0);
+        float overallY = max(dot(overallRGB, luma), 0.000001);
+        float lowStops = log2(overallY / 0.18);
+        float contrastPosition = lowStops * 0.58;
+        float contrastCurve = contrastPosition / (1.0 + abs(contrastPosition));
+        float ortonLowY = 0.18 * exp2(
+            lowStops + normalizedAmount * 0.16 * contrastCurve
+        );
+        float luminousMidtones = smoothstep(0.06, 0.38, overallY)
+            * (1.0 - smoothstep(0.68, 1.08, overallY));
+        ortonLowY *= 1.0 + normalizedAmount * 0.045 * luminousMidtones;
+
+        float detailResidual = sourceY - overallY;
+        float detailRetention = mix(0.82, 1.02, clamp(detail, 0.0, 1.0));
+        float reconstructedY = max(
+            0.0,
+            mix(sourceY, ortonLowY + detailResidual * detailRetention, normalizedAmount)
+        );
+        vec3 tonedSource = sourceY > 0.000001
+            ? sourceRGB * (reconstructedY / sourceY)
+            : vec3(0.0);
+        vec3 ortonColor = overallRGB * (reconstructedY / overallY);
+        float colorMeld = normalizedAmount
+            * mix(0.20, 0.08, clamp(detail, 0.0, 1.0));
+        vec3 baseRGB = mix(tonedSource, ortonColor, colorMeld);
+
+        // Protect a progressively wider receiving shadow range without a hard mask.
+        // Glow remains strongest beside light, then eases near white to retain sky
+        // gradients and illuminated cloud structure.
+        float shadowKnee = mix(0.008, 0.15, clamp(shadowProtection, 0.0, 1.0));
+        float shadowGate = smoothstep(shadowKnee * 0.35, shadowKnee + 0.16, sourceY);
+        float highlightProtection = 1.0 - 0.48 * smoothstep(0.72, 1.10, sourceY);
+        float glowWeight = normalizedAmount * 0.22 * shadowGate * highlightProtection;
+        float headroom = 1.0 - smoothstep(0.58, 1.08, sourceY);
+        vec3 rgb = max(
+            vec3(0.0),
+            baseRGB + glowRGB * glowWeight * mix(0.42, 1.0, headroom)
+        );
+
+        // Pull only out-of-range chroma toward neutral. This retains extended
+        // luminance for the output transform and avoids channel-clipped sunsets.
+        float outputY = max(dot(rgb, luma), 0.000001);
+        float minimum = min(rgb.r, min(rgb.g, rgb.b));
+        float maximum = max(rgb.r, max(rgb.g, rgb.b));
+        float lowScale = minimum < 0.0 ? outputY / max(outputY - minimum, 0.000001) : 1.0;
+        float availableHighlight = max(1.08 - outputY, 0.0);
+        float colorExcursion = max(maximum - outputY, 0.0);
+        float highScale = colorExcursion > availableHighlight
+            ? availableHighlight / max(colorExcursion, 0.000001)
+            : 1.0;
+        rgb = mix(vec3(outputY), rgb, clamp(min(lowScale, highScale), 0.0, 1.0));
+        return vec4(rgb * sourceAlpha, sourceAlpha);
     }
     """#
 

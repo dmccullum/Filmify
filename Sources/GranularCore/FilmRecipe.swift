@@ -203,6 +203,30 @@ public struct HalationSettings: Codable, Hashable, Sendable {
     }
 }
 
+public struct LandscapeGlowSettings: Codable, Hashable, Sendable {
+    public static let maximumAmount = 1.0
+
+    public var isEnabled: Bool
+    public var amount: Double
+    public var glowSize: Double
+    public var shadowProtection: Double
+    public var detail: Double
+
+    public init(
+        isEnabled: Bool = false,
+        amount: Double = 0.25,
+        glowSize: Double = 0.5,
+        shadowProtection: Double = 0.72,
+        detail: Double = 0.7
+    ) {
+        self.isEnabled = isEnabled
+        self.amount = amount
+        self.glowSize = glowSize
+        self.shadowProtection = shadowProtection
+        self.detail = detail
+    }
+}
+
 public struct GrainSettings: Codable, Hashable, Sendable {
     public static let maximumAmount = 1.0
     public static let maximumGrainSize = 60.0
@@ -248,6 +272,7 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
     public var lensBlur: LensBlurSettings
     public var diffusion: DiffusionSettings
     public var halation: HalationSettings
+    public var landscapeGlow: LandscapeGlowSettings
     public var grain: GrainSettings
 
     public init(
@@ -258,6 +283,7 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
         lensBlur: LensBlurSettings = .init(),
         diffusion: DiffusionSettings,
         halation: HalationSettings,
+        landscapeGlow: LandscapeGlowSettings = .init(),
         grain: GrainSettings
     ) {
         self.id = id
@@ -267,7 +293,36 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
         self.lensBlur = lensBlur
         self.diffusion = diffusion
         self.halation = halation
+        self.landscapeGlow = landscapeGlow
         self.grain = grain
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case tone
+        case lightShaping
+        case lensBlur
+        case diffusion
+        case halation
+        case landscapeGlow
+        case grain
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        tone = try container.decodeIfPresent(FilmToneSettings.self, forKey: .tone) ?? .init()
+        lightShaping = try container.decode(LightShapingSettings.self, forKey: .lightShaping)
+        lensBlur = try container.decodeIfPresent(LensBlurSettings.self, forKey: .lensBlur) ?? .init()
+        diffusion = try container.decode(DiffusionSettings.self, forKey: .diffusion)
+        halation = try container.decode(HalationSettings.self, forKey: .halation)
+        landscapeGlow = try container.decodeIfPresent(
+            LandscapeGlowSettings.self,
+            forKey: .landscapeGlow
+        ) ?? .init()
+        grain = try container.decode(GrainSettings.self, forKey: .grain)
     }
 
 }

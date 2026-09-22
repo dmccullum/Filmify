@@ -21,6 +21,7 @@ struct AdjustmentsInspector: View {
                 LensBlurCard(settings: $model.recipe.lensBlur, reset: model.resetLensBlur)
                 DiffusionCard(settings: $model.recipe.diffusion, reset: model.resetDiffusion)
                 HalationCard(settings: $model.recipe.halation, reset: model.resetHalation)
+                LandscapeGlowCard(settings: $model.recipe.landscapeGlow, reset: model.resetLandscapeGlow)
                 GrainCard(
                     settings: $model.recipe.grain,
                     reset: model.resetGrain,
@@ -172,6 +173,31 @@ private struct HalationCard: View {
             ParameterSlider("Color Shift", value: $settings.colorShift, range: 0 ... 1)
             ParameterSlider("Saturation", value: $settings.saturation, range: 0 ... 1)
             ParameterSlider("Green Leakage", value: $settings.greenLeakage, range: 0 ... 0.5)
+        }
+    }
+}
+
+private struct LandscapeGlowCard: View {
+    @Binding var settings: LandscapeGlowSettings
+    let reset: () -> Void
+
+    var body: some View {
+        EffectCard(
+            title: "Landscape Glow",
+            symbol: "sun.max.fill",
+            tint: .purple,
+            enabled: $settings.isEnabled,
+            reset: reset
+        ) {
+            ParameterSlider(
+                "Amount",
+                value: $settings.amount,
+                range: 0 ... LandscapeGlowSettings.maximumAmount
+            )
+            ParameterSlider("Glow Size", value: $settings.glowSize, range: 0 ... 1)
+        } advanced: {
+            ParameterSlider("Shadow Protection", value: $settings.shadowProtection, range: 0 ... 1)
+            ParameterSlider("Detail", value: $settings.detail, range: 0 ... 1)
         }
     }
 }

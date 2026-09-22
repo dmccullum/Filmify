@@ -118,6 +118,7 @@ private struct PipelineSignature: View {
         ("drop.halffull", .cyan),
         ("circle.dotted", .indigo),
         ("sun.horizon", .red),
+        ("sun.max.fill", .purple),
         ("aqi.medium", .mint)
     ]
 
@@ -144,6 +145,6 @@ private struct PipelineSignature: View {
                 .strokeBorder(.white.opacity(0.09), lineWidth: 0.5)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Film Tone, Vignette, Lens Blur, Diffusion, Halation, and Film Grain")
+        .accessibilityLabel("Film Tone, Vignette, Lens Blur, Diffusion, Halation, Landscape Glow, and Film Grain")
     }
 }

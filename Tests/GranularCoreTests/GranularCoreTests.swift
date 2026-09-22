@@ -14,9 +14,56 @@ import Testing
         #expect((0 ... 1).contains(recipe.lensBlur.amount))
         #expect((0 ... 1).contains(recipe.diffusion.amount))
         #expect((0 ... 1).contains(recipe.halation.amount))
+        #expect(recipe.landscapeGlow.isEnabled == false)
+        #expect((0 ... 1).contains(recipe.landscapeGlow.amount))
         #expect((0 ... 1).contains(recipe.grain.amount))
         #expect(recipe.grain.grainSize > 0)
     }
+}
+
+@Test func landscapeGlowDefaultsAreRestrainedAndDisabled() {
+    let settings = LandscapeGlowSettings()
+
+    #expect(settings.isEnabled == false)
+    #expect(settings.amount == 0.25)
+    #expect(settings.glowSize == 0.5)
+    #expect(settings.shadowProtection == 0.72)
+    #expect(settings.detail == 0.7)
+}
+
+@Test func recipesSavedBeforeLandscapeGlowDecodeWithTheEffectDisabled() throws {
+    let legacy = LegacyFilmRecipe(
+        id: "legacy",
+        name: "Legacy Recipe",
+        tone: .init(isEnabled: false),
+        lightShaping: .init(isEnabled: false),
+        lensBlur: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        grain: .init(isEnabled: false)
+    )
+    let data = try JSONEncoder().encode(legacy)
+    let decoded = try JSONDecoder().decode(FilmRecipe.self, from: data)
+
+    #expect(decoded.id == legacy.id)
+    #expect(decoded.name == legacy.name)
+    #expect(decoded.landscapeGlow == LandscapeGlowSettings())
+}
+
+@Test func landscapeGlowSettingsRoundTripWithRecipes() throws {
+    var recipe = FilmRecipe.classic35
+    recipe.landscapeGlow = .init(
+        isEnabled: true,
+        amount: 0.63,
+        glowSize: 0.82,
+        shadowProtection: 0.41,
+        detail: 0.77
+    )
+
+    let data = try JSONEncoder().encode(recipe)
+    let decoded = try JSONDecoder().decode(FilmRecipe.self, from: data)
+
+    #expect(decoded == recipe)
 }
 
 @Test func classic35UsesTheCIHBalance() {
@@ -602,6 +649,192 @@ import Testing
     #expect(distantShadow < 0.005)
 }
 
+@Test func landscapeGlowIsAnExactIdentityAtZeroAmount() throws {
+    let extent = CGRect(x: 0, y: 0, width: 96, height: 64)
+    let source = CIImage(color: .init(red: 0.48, green: 0.24, blue: 0.08, alpha: 1))
+        .cropped(to: extent)
+    let recipe = FilmRecipe(
+        id: "glow-zero-test",
+        name: "Glow Zero Test",
+        lightShaping: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        landscapeGlow: .init(isEnabled: true, amount: 0),
+        grain: .init(isEnabled: false)
+    )
+
+    let input = renderFloatPixels(source, extent: extent)
+    let output = renderFloatPixels(try FilmRenderer().render(source, recipe: recipe), extent: extent)
+    #expect(meanAbsoluteLuminanceDifference(input, output) < 0.000_001)
+}
+
+@Test func landscapeGlowSpreadsBrightColorWithoutFoggingDeepShadows() throws {
+    let extent = CGRect(x: 0, y: 0, width: 256, height: 256)
+    let shadows = CIImage(color: .init(red: 0.025, green: 0.025, blue: 0.025, alpha: 1))
+        .cropped(to: extent)
+    let surroundingLandscape = CIImage(color: .init(red: 0.12, green: 0.12, blue: 0.12, alpha: 1))
+        .cropped(to: CGRect(x: 72, y: 72, width: 112, height: 112))
+    let warmLight = CIImage(color: .init(red: 1.0, green: 0.55, blue: 0.16, alpha: 1))
+        .cropped(to: CGRect(x: 116, y: 116, width: 24, height: 24))
+    let source = warmLight.composited(over: surroundingLandscape.composited(over: shadows))
+    let recipe = FilmRecipe(
+        id: "landscape-glow-test",
+        name: "Landscape Glow Test",
+        lightShaping: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        landscapeGlow: .init(
+            isEnabled: true,
+            amount: 0.75,
+            glowSize: 0.55,
+            shadowProtection: 0.72,
+            detail: 0.7
+        ),
+        grain: .init(isEnabled: false)
+    )
+
+    let pixels = renderFloatPixels(try FilmRenderer().render(source, recipe: recipe), extent: extent)
+    let nearbyIndex = (128 * 256 + 108) * 4
+    let distantIndex = (24 * 256 + 24) * 4
+    let nearby = pixelLuminance(Array(pixels[nearbyIndex ..< nearbyIndex + 4]))
+    let distant = pixelLuminance(Array(pixels[distantIndex ..< distantIndex + 4]))
+
+    #expect(nearby > 0.12)
+    #expect(distant < 0.03)
+    #expect(pixels[nearbyIndex] > pixels[nearbyIndex + 2])
+}
+
+@Test func landscapeGlowAddsSubtleContrastInsteadOfMutingTheImage() throws {
+    let extent = CGRect(x: 0, y: 0, width: 256, height: 128)
+    let shadows = CIImage(color: .init(red: 0.10, green: 0.10, blue: 0.10, alpha: 1))
+        .cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
+    let highlights = CIImage(color: .init(red: 0.55, green: 0.55, blue: 0.55, alpha: 1))
+        .cropped(to: CGRect(x: 128, y: 0, width: 128, height: 128))
+    let source = highlights.composited(over: shadows)
+    let recipe = FilmRecipe(
+        id: "glow-contrast-test",
+        name: "Glow Contrast Test",
+        lightShaping: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        landscapeGlow: .init(
+            isEnabled: true,
+            amount: 0.5,
+            glowSize: 0.5,
+            shadowProtection: 0.72,
+            detail: 0.7
+        ),
+        grain: .init(isEnabled: false)
+    )
+
+    let pixels = renderFloatPixels(try FilmRenderer().render(source, recipe: recipe), extent: extent)
+    let darkIndex = (64 * 256 + 32) * 4
+    let lightIndex = (64 * 256 + 224) * 4
+    let dark = pixelLuminance(Array(pixels[darkIndex ..< darkIndex + 4]))
+    let light = pixelLuminance(Array(pixels[lightIndex ..< lightIndex + 4]))
+
+    #expect(dark < 0.10)
+    #expect(light > 0.55)
+    #expect(light - dark > 0.45)
+}
+
+@Test func landscapeGlowRetainsAnOverallOrtonBodyBelowTheHighlights() throws {
+    let extent = CGRect(x: 0, y: 0, width: 256, height: 128)
+    let coolMidtone = CIImage(color: .init(red: 0.12, green: 0.24, blue: 0.28, alpha: 1))
+        .cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
+    let warmMidtone = CIImage(color: .init(red: 0.34, green: 0.22, blue: 0.10, alpha: 1))
+        .cropped(to: CGRect(x: 128, y: 0, width: 128, height: 128))
+    let source = warmMidtone.composited(over: coolMidtone)
+    let recipe = FilmRecipe(
+        id: "glow-overall-body-test",
+        name: "Glow Overall Body Test",
+        lightShaping: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        landscapeGlow: .init(
+            isEnabled: true,
+            amount: 0.5,
+            glowSize: 0.65,
+            shadowProtection: 0.72,
+            detail: 0.7
+        ),
+        grain: .init(isEnabled: false)
+    )
+
+    let input = renderFloatPixels(source, extent: extent)
+    let output = renderFloatPixels(try FilmRenderer().render(source, recipe: recipe), extent: extent)
+    #expect(meanAbsoluteLuminanceDifference(input, output) > 0.003)
+
+    // The full-frame color layer should gently connect the two midtone regions,
+    // even though neither side contains a conventional bright highlight.
+    let coolEdgeIndex = (64 * 256 + 124) * 4
+    #expect(output[coolEdgeIndex] > input[coolEdgeIndex])
+}
+
+@Test func landscapeGlowDetailControlRestoresFineLuminanceStructure() throws {
+    let extent = CGRect(x: 0, y: 0, width: 256, height: 256)
+    let dark = CIImage(color: .init(red: 0.22, green: 0.22, blue: 0.22, alpha: 1))
+        .cropped(to: extent)
+    let lightStripe = CIImage(color: .init(red: 0.58, green: 0.58, blue: 0.58, alpha: 1))
+        .cropped(to: CGRect(x: 128, y: 0, width: 2, height: 256))
+    let source = lightStripe.composited(over: dark)
+    let renderer = try FilmRenderer()
+
+    func edgeContrast(detail: Double) throws -> Float {
+        let recipe = FilmRecipe(
+            id: "glow-detail-\(detail)",
+            name: "Glow Detail",
+            lightShaping: .init(isEnabled: false),
+            diffusion: .init(isEnabled: false),
+            halation: .init(isEnabled: false),
+            landscapeGlow: .init(
+                isEnabled: true,
+                amount: 1,
+                glowSize: 0.5,
+                shadowProtection: 0,
+                detail: detail
+            ),
+            grain: .init(isEnabled: false)
+        )
+        let pixels = renderFloatPixels(try renderer.render(source, recipe: recipe), extent: extent)
+        let stripe = pixels[(128 * 256 + 128) * 4]
+        let neighbor = pixels[(128 * 256 + 126) * 4]
+        return stripe - neighbor
+    }
+
+    let softened = try edgeContrast(detail: 0)
+    let restored = try edgeContrast(detail: 1)
+    #expect(restored > softened + 0.002)
+}
+
+@Test func landscapeGlowPreservesTransparencyWithoutDarkEdgeContamination() throws {
+    let extent = CGRect(x: 0, y: 0, width: 128, height: 128)
+    let clear = CIImage(color: .clear).cropped(to: extent)
+    let opaqueSubject = CIImage(color: .init(red: 0.7, green: 0.35, blue: 0.12, alpha: 1))
+        .cropped(to: CGRect(x: 32, y: 32, width: 64, height: 64))
+    let source = opaqueSubject.composited(over: clear)
+    let recipe = FilmRecipe(
+        id: "glow-alpha-test",
+        name: "Glow Alpha Test",
+        lightShaping: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        landscapeGlow: .init(isEnabled: true, amount: 1),
+        grain: .init(isEnabled: false)
+    )
+
+    let input = renderFloatPixels(source, extent: extent)
+    let output = renderFloatPixels(try FilmRenderer().render(source, recipe: recipe), extent: extent)
+    for index in stride(from: 0, to: output.count, by: 4) {
+        #expect(abs(input[index + 3] - output[index + 3]) < 0.000_001)
+        if input[index + 3] == 0 {
+            #expect(abs(output[index]) < 0.000_001)
+            #expect(abs(output[index + 1]) < 0.000_001)
+            #expect(abs(output[index + 2]) < 0.000_001)
+        }
+    }
+}
+
 @Test func lensBlurSoftensTheFieldEdgesWhileKeepingTheOpticalCenterSharp() throws {
     let extent = CGRect(x: 0, y: 0, width: 256, height: 256)
     let black = CIImage(color: .init(red: 0, green: 0, blue: 0, alpha: 1)).cropped(to: extent)
@@ -864,6 +1097,17 @@ private func grainTestRecipe(chroma: Double) -> FilmRecipe {
             seed: 1234
         )
     )
+}
+
+private struct LegacyFilmRecipe: Encodable {
+    let id: String
+    let name: String
+    let tone: FilmToneSettings
+    let lightShaping: LightShapingSettings
+    let lensBlur: LensBlurSettings
+    let diffusion: DiffusionSettings
+    let halation: HalationSettings
+    let grain: GrainSettings
 }
 
 private func channelSpread(_ pixels: [Float]) -> Float {
