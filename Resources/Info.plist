@@ -13,7 +13,7 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon.icns</string>
     <key>CFBundleIdentifier</key>
-	<string>com.danielmccullum.Filmify</string>
+	<string>com.danielmccullum.Granular</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

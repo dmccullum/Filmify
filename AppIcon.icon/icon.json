@@ -1,18 +1,386 @@
 {
   "fill" : {
-    "solid" : "srgb:0.10588,0.12157,0.14510,1.00000"
+    "linear-gradient" : [
+      "display-p3:0.74279,0.74279,0.74279,1.00000",
+      "extended-gray:0.25000,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
   },
   "groups" : [
     {
+      "blend-mode" : "screen",
+      "blur-material" : 0.1,
       "layers" : [
         {
-          "image-name" : "Granular-Optics.png",
-          "name" : "Granular Optics",
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:0.94083,0.79221,0.46909,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5,
+                "y" : 0.5
+              },
+              "stop" : {
+                "x" : 0.7816298890063424,
+                "y" : 0.7717858086680761
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Granular-08.svg",
+          "name" : "Granular-08",
+          "opacity" : 0.01,
           "position-specializations" : [
             {
               "idiom" : "square",
               "value" : {
-                "scale" : 0.58,
+                "scale" : 0.78,
+                "translation-in-points" : [
+                  12.338730684773168,
+                  30.07061052701431
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "blend-mode" : "plus-lighter",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:1.00000,0.50016,0.00015,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.7091867071881607,
+                "y" : 0.7262651955602537
+              },
+              "stop" : {
+                "x" : 0.8327662526427061,
+                "y" : 0.813127642706131
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Granular-07.svg",
+          "name" : "Granular-07"
+        },
+        {
+          "blend-mode" : "plus-lighter",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:1.00000,0.50016,0.00015,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.680513345665962,
+                "y" : 0.6891682082452432
+              },
+              "stop" : {
+                "x" : 0.7773189746300211,
+                "y" : 0.8268697145877378
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Granular-07.svg",
+          "name" : "Granular-07"
+        },
+        {
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:1.00000,0.50016,0.00015,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.7294034090909091,
+                "y" : 0.6672667811839323
+              },
+              "stop" : {
+                "x" : 0.8244086945031712,
+                "y" : 0.7870144027484144
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Granular-07.svg",
+          "name" : "Granular-07"
+        },
+        {
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:1.00000,0.50016,0.00015,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.6646240750528541,
+                "y" : 0.6472813160676533
+              },
+              "stop" : {
+                "x" : 0.8196353065539113,
+                "y" : 0.7940340909090909
+              }
+            }
+          },
+          "hidden" : false,
+          "image-name" : "Granular-07.svg",
+          "name" : "Granular-07"
+        },
+        {
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:1.00000,0.50016,0.00015,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.46075581395348836,
+                "y" : 0.43654201902748413
+              },
+              "stop" : {
+                "x" : 0.8196353065539113,
+                "y" : 0.7940340909090909
+              }
+            }
+          },
+          "image-name" : "Granular-07.svg",
+          "name" : "Granular-07"
+        },
+        {
+          "blend-mode" : "plus-lighter",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:0.00000,0.78866,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.3146141649048626,
+                "y" : 0.2781117864693446
+              },
+              "stop" : {
+                "x" : 0.14784289112050739,
+                "y" : 0.0383853065539112
+              }
+            }
+          },
+          "image-name" : "Granular-06.svg",
+          "name" : "Granular-06",
+          "opacity" : 1
+        },
+        {
+          "blend-mode" : "plus-lighter",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:0.00000,0.78866,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.26848242600422834,
+                "y" : 0.24392177589852007
+              },
+              "stop" : {
+                "x" : 0.08981897463002114,
+                "y" : 0.15053514799154333
+              }
+            }
+          },
+          "image-name" : "Granular-06.svg",
+          "name" : "Granular-06",
+          "opacity" : 1
+        },
+        {
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:0.00000,0.78866,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.3362017706131078,
+                "y" : 0.3138048361522199
+              },
+              "stop" : {
+                "x" : 0.24241873678646936,
+                "y" : 0.213150766384778
+              }
+            }
+          },
+          "image-name" : "Granular-06.svg",
+          "name" : "Granular-06",
+          "opacity" : 1
+        },
+        {
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:0.00000,0.78866,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.3289343287526427,
+                "y" : 0.2971888213530655
+              },
+              "stop" : {
+                "x" : 0.216883588794926,
+                "y" : 0.20309196617336153
+              }
+            }
+          },
+          "image-name" : "Granular-06.svg",
+          "name" : "Granular-06",
+          "opacity" : 1
+        },
+        {
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:0.00000,0.78866,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5458509513742071,
+                "y" : 0.5
+              },
+              "stop" : {
+                "x" : 0.24241873678646936,
+                "y" : 0.213150766384778
+              }
+            }
+          },
+          "image-name" : "Granular-06.svg",
+          "name" : "Granular-06",
+          "opacity" : 1
+        }
+      ],
+      "name" : "Lens Highlights",
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.77
+      }
+    },
+    {
+      "blur-material" : 0.05,
+      "hidden" : false,
+      "layers" : [
+        {
+          "blend-mode" : "screen",
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.00000,1.00000",
+              "display-p3:0.00000,0.78866,1.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.5511198467230444,
+                "y" : 0.5525568181818182
+              },
+              "stop" : {
+                "x" : 0.05216206395348837,
+                "y" : 0.05119912790697674
+              }
+            }
+          },
+          "image-name" : "Granular-05.svg",
+          "name" : "Granular-05",
+          "opacity" : 0.15
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.40000,0.40000,0.40000,1.00000",
+              "extended-gray:0.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.20906613372093022,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.8104469476744186,
+                "y" : 0.8498546511627907
+              }
+            }
+          },
+          "image-name" : "Granular-05.svg",
+          "name" : "Granular-05",
+          "opacity" : 0.7
+        }
+      ],
+      "name" : "Outer Lens",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.77
+      }
+    },
+    {
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:1.00000,1.00000",
+              "extended-gray:0.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.235986328125,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.753515625,
+                "y" : 0.815283203125
+              }
+            }
+          },
+          "image-name" : "Granular-04.svg",
+          "name" : "Granular-04",
+          "opacity" : 0.37
+        },
+        {
+          "fill" : {
+            "solid" : "extended-gray:0.00000,1.00000"
+          },
+          "hidden" : false,
+          "image-name" : "Granular-03.svg",
+          "name" : "Granular-03",
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 1.02,
                 "translation-in-points" : [
                   0,
                   0
@@ -22,50 +390,60 @@
           ]
         }
       ],
-      "name" : "Optics",
+      "name" : "Lens Details",
+      "opacity" : 0.38,
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.24
+        "opacity" : 0.5
       },
+      "specular" : true,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.16
+        "value" : 0.6
       }
     },
     {
+      "blur-material" : null,
       "layers" : [
         {
-          "fill-specializations" : [
-            {
-              "value" : {
-                "automatic-gradient" : "extended-gray:0.75000,1.00000"
-              }
-            },
-            {
-              "appearance" : "dark",
-              "value" : {
-                "automatic-gradient" : "extended-gray:0.00000,1.00000"
+          "fill" : {
+            "solid" : "extended-gray:0.00000,1.00000"
+          },
+          "image-name" : "Granular-02.svg",
+          "name" : "Granular-02",
+          "opacity" : 0.8
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "extended-gray:0.50000,1.00000",
+              "extended-gray:0.00000,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.2470189144736842,
+                "y" : 0.06425687799043062
+              },
+              "stop" : {
+                "x" : 0.7867542613636364,
+                "y" : 0.9054463217703349
               }
             }
-          ],
-          "hidden-specializations" : [
-            {
-              "idiom" : "square",
-              "value" : false
-            }
-          ],
-          "image-name" : "Granular-Background.png",
-          "name" : "Granular Background"
+          },
+          "hidden" : false,
+          "image-name" : "Granular-01.svg",
+          "name" : "Granular-01"
         }
       ],
-      "name" : "Background",
+      "name" : "Lens Base",
       "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.28
+        "kind" : "layer-color",
+        "opacity" : 0.5
       },
+      "specular" : true,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.3
+        "value" : 0
       }
     }
   ],

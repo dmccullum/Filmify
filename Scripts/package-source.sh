@@ -12,11 +12,22 @@ ARCHIVE="$ROOT/dist/$PACKAGE_NAME.zip"
 rm -rf "$STAGE_ROOT"
 mkdir -p "$STAGE" "$ROOT/dist"
 
-/usr/bin/rsync -a \
+/usr/bin/rsync -a --prune-empty-dirs \
     --exclude '/.build/' \
     --exclude '/.git/' \
+    --exclude '/.pnpm-store/' \
     --exclude '/dist/' \
     --exclude '/.DS_Store' \
+    --exclude '/Icon/' \
+    --exclude '/Website/.next/' \
+    --exclude '/Website/.openai/' \
+    --exclude '/Website/.vinext/' \
+    --exclude '/Website/.wrangler/' \
+    --exclude '/Website/dist/' \
+    --exclude '/Website/node_modules/' \
+    --exclude '/Website/outputs/' \
+    --exclude '/Website/work/' \
+    --exclude '/Website/worker/' \
     "$ROOT/" "$STAGE/"
 
 chmod +x \
