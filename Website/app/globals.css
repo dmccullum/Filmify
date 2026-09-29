@@ -37,7 +37,7 @@ em { font-weight: 500; }
   letter-spacing: .1em;
 }
 .journal-mark { display: flex; align-items: center; gap: 11px; font: 600 27px "Barlow Condensed", sans-serif; letter-spacing: .08em; }
-.journal-mark img { width: 40px; height: 40px; border-radius: 9px; filter: drop-shadow(0 3px 5px rgba(27,25,21,.42)); }
+.journal-mark img { width: 40px; height: 40px; border-radius: 9px; filter: drop-shadow(0 3px 5px rgba(27,25,21,.42)); transform: translateZ(0); }
 .masthead > a:last-child { border-bottom: 1px solid currentColor; }
 
 .opening {
@@ -230,7 +230,7 @@ em { font-weight: 500; }
   background: var(--yellow);
   overflow: hidden;
 }
-.last-frame > img { width: clamp(104px, 11vw, 154px); margin: 0 0 clamp(28px, 4vw, 46px); filter: drop-shadow(0 8px 14px rgba(27,25,21,.3)); }
+.last-frame > img { width: clamp(104px, 11vw, 154px); margin: 0 0 clamp(28px, 4vw, 46px); filter: drop-shadow(0 8px 14px rgba(27,25,21,.3)); transform: translateZ(0); }
 .last-frame h2 { max-width: min(90vw, 1180px); margin: 0 0 clamp(32px, 4vw, 52px); font-size: clamp(66px, 8vw, 126px); }
 .last-frame h2 a { color: var(--red); }
 .stamp-red { background: var(--red); color: var(--paper); box-shadow: 5px 5px 0 var(--ink); }
