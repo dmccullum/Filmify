@@ -169,7 +169,8 @@ struct FilmCanisterView: View {
 
     // MARK: Pieces
 
-    /// A metal 35mm-style tin: spool nub, caps, printed body and the velvet light-trap lip.
+    /// A metal 35mm-style tin: caps, printed body and the velvet light-trap lip, with the
+    /// spool nub at the bottom, the way a canister sits in a camera.
     private func tin<Printed: View>(
         bodyWidth: CGFloat,
         steelCaps: Bool,
@@ -178,7 +179,6 @@ struct FilmCanisterView: View {
         let bodyHeight: CGFloat = 266
         let steelNub = bodyWidth * 0.2
         return VStack(spacing: 0) {
-            cap(width: steelCaps ? steelNub : 34, height: 14, steel: steelCaps, top: true)
             cap(width: bodyWidth - 8, height: 20, steel: steelCaps, top: true)
             ZStack {
                 printed()
@@ -187,6 +187,7 @@ struct FilmCanisterView: View {
             .frame(width: bodyWidth * s, height: bodyHeight * s)
             .clipped()
             cap(width: bodyWidth - 8, height: 20, steel: steelCaps, top: false)
+            cap(width: steelCaps ? steelNub : 34, height: 14, steel: steelCaps, top: false)
         }
         .overlay(alignment: .topTrailing) {
             Canvas { context, size in
@@ -199,7 +200,7 @@ struct FilmCanisterView: View {
             }
                 .frame(width: 10 * s, height: 256 * s)
                 .clipShape(RoundedRectangle(cornerRadius: 2 * s))
-                .offset(x: 6 * s, y: 39 * s)
+                .offset(x: 6 * s, y: 25 * s)
         }
     }
 
