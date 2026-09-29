@@ -20,6 +20,7 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$ROOT/.build/release/Granular" "$CONTENTS/MacOS/Granular"
 cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 cp -R "$ROOT/Sources/GranularCore/FilmStocks" "$CONTENTS/Resources/FilmStocks"
+cp -R "$ROOT/Resources/Fonts" "$CONTENTS/Resources/Fonts"
 cp "$ROOT/Resources/THIRD_PARTY_NOTICES.txt" "$CONTENTS/Resources/THIRD_PARTY_NOTICES.txt"
 xcrun actool \
     "$ROOT/Resources/Assets.xcassets" \

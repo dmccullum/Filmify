@@ -182,16 +182,17 @@ struct VerticalLabel: Layout {
     }
 }
 
-/// The maker's nameplate on the camera's top plate: spaced mid-century
-/// capitals, painted white on black chrome and black on stainless.
+/// The maker's nameplate on the camera's top plate: spaced condensed
+/// capitals in the website's Barlow Condensed, painted white on black
+/// chrome and black on stainless.
 struct CameraNameplate: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let isDark = colorScheme == .dark
         Text("GRANULAR")
-            .font(.custom("Futura-Medium", size: 16))
-            .tracking(5)
+            .font(.custom("BarlowCondensed-SemiBold", size: 21))
+            .tracking(4.5)
             .foregroundStyle(
                 LinearGradient(
                     colors: isDark
