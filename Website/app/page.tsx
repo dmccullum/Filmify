@@ -37,10 +37,10 @@ export default function Home() {
         <div className="workbench-words"><span>Drop photos in</span><em>for instant results,</em><span>or edit live.</span></div>
         <div className="workbench-views">
           <figure className="app-frame edit-frame" data-parallax="-18">
-            <img src={asset("/granular-edit.png")} alt="Granular Edit mode with live preview and adjustment panels" />
+            <img src={asset("/granular-edit.png?v=2")} alt="Granular Edit mode with live preview and adjustment panels" />
           </figure>
           <figure className="app-frame instant-frame" data-parallax="14">
-            <img src={asset("/granular-instant.png")} alt="Granular Instant mode: a film canister and a strip of frames to drop images onto" />
+            <img src={asset("/granular-instant.png?v=2")} alt="Granular Instant mode: a film canister and a strip of frames to drop images onto" />
           </figure>
         </div>
       </section>
