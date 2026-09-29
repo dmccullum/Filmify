@@ -127,37 +127,20 @@ struct CylinderShade: View {
     var body: some View {
         LinearGradient(
             stops: [
-                .init(color: .black.opacity(0.50 * strength), location: 0),
-                .init(color: .black.opacity(0.12 * strength), location: 0.09),
-                .init(color: .white.opacity(0.42 * strength), location: 0.23),
+                .init(color: .black.opacity(0.48 * strength), location: 0),
+                .init(color: .black.opacity(0.18 * strength), location: 0.06),
+                .init(color: .white.opacity(0.10 * strength), location: 0.15),
+                .init(color: .white.opacity(0.20 * strength), location: 0.21),
+                .init(color: .white.opacity(0.06 * strength), location: 0.3),
                 .init(color: .white.opacity(0), location: 0.42),
-                .init(color: .black.opacity(0.06 * strength), location: 0.68),
-                .init(color: .black.opacity(0.55 * strength), location: 1)
+                .init(color: .black.opacity(0.08 * strength), location: 0.66),
+                .init(color: .black.opacity(0.28 * strength), location: 0.86),
+                .init(color: .black.opacity(0.5 * strength), location: 1)
             ],
             startPoint: .leading,
             endPoint: .trailing
         )
         .allowsHitTesting(false)
-    }
-}
-
-struct Ribbed: View {
-    var dark: Color
-    var light: Color
-    var pitch: CGFloat = 5
-
-    var body: some View {
-        Canvas { context, size in
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(dark))
-            var x: CGFloat = 0
-            while x < size.width {
-                context.fill(
-                    Path(CGRect(x: x + pitch * 0.55, y: 0, width: pitch * 0.45, height: size.height)),
-                    with: .color(light)
-                )
-                x += pitch
-            }
-        }
     }
 }
 

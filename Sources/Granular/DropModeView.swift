@@ -257,13 +257,19 @@ private struct FilmChamber: View {
             // Size everything from the Instant window's chamber, not the live
             // height, so nothing balloons while the window resizes between modes.
             let layoutHeight = min(height, 310)
-            let canisterHeight = layoutHeight - 26
-            let scale = canisterHeight / 320
-            let canisterWidth = CanisterStyle.designBodyWidth * scale
+            let g = CanisterGeometry.self
+            let canisterHeight = layoutHeight - 30
+            let scale = canisterHeight / g.height
+            let canisterWidth = g.width * scale
             let canisterLeading: CGFloat = 20
+            let canisterTop = (height - canisterHeight) / 2
             let bodyTrailing = canisterLeading + canisterWidth
-            let stripLeading = bodyTrailing - 10 * scale
-            let stripHeight = (layoutHeight * format.stripFraction).rounded()
+            // The film comes out from under the lip, as tall as the body and
+            // nearly flush with its top, like a real canister.
+            let bodyHeight = g.bodyHeight * scale
+            let stripHeight = (bodyHeight * g.filmToBody).rounded()
+            let stripTop = canisterTop + g.topCap * scale + (bodyHeight - stripHeight) * 0.25
+            let stripLeading = canisterLeading + (2 + g.bodyWidth - g.lipWidth / 2) * scale
             let stripWidth = width - stripLeading
 
             ZStack(alignment: .topLeading) {
@@ -276,11 +282,11 @@ private struct FilmChamber: View {
                             .blur(radius: 6)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     )
-                    .frame(width: bodyTrailing + 4, height: layoutHeight - 12)
-                    .offset(x: 8, y: (height - layoutHeight) / 2 + 6)
+                    .frame(width: bodyTrailing + 4, height: canisterHeight + 18)
+                    .offset(x: 8, y: canisterTop - 9)
 
-                rail(y: (height - stripHeight) / 2 - 9, from: stripLeading + 30, to: width - 70)
-                rail(y: (height + stripHeight) / 2 + 5, from: stripLeading + 30, to: width - 70)
+                rail(y: stripTop - 9, from: stripLeading + 30, to: width - 70)
+                rail(y: stripTop + stripHeight + 5, from: stripLeading + 30, to: width - 70)
 
                 FilmStrip(
                     format: format,
@@ -301,7 +307,7 @@ private struct FilmChamber: View {
                     Rectangle().frame(width: stripWidth * filmOut)
                 }
                 .allowsHitTesting(filmOut == 1)
-                .offset(x: stripLeading, y: (height - stripHeight) / 2)
+                .offset(x: stripLeading, y: stripTop)
 
                 if isTargeted {
                     RadialGradient(
@@ -314,7 +320,7 @@ private struct FilmChamber: View {
                 }
 
                 if let gate, !reduceMotion {
-                    ChamberFlash(center: UnitPoint(x: (stripLeading + stripHeight * 0.6) / width, y: 0.5))
+                    ChamberFlash(center: UnitPoint(x: (stripLeading + stripHeight * 0.6) / width, y: (stripTop + stripHeight / 2) / height))
                         .id(gate.id)
                         .allowsHitTesting(false)
                 }
@@ -337,7 +343,7 @@ private struct FilmChamber: View {
                         removal: .opacity
                     )
                 )
-                .offset(x: canisterLeading, y: (height - canisterHeight) / 2)
+                .offset(x: canisterLeading, y: canisterTop)
             }
             .animation(.spring(duration: 0.45, bounce: 0.18), value: style)
         }
@@ -612,8 +618,8 @@ private struct FilmRebate: View {
             let printHeight: CGFloat = edgePrint == nil ? 0 : 10
             if perforated, perforationsPerFrame > 0 {
                 let perfPitch = pitch / CGFloat(perforationsPerFrame)
-                let holeWidth = min(perfPitch * 0.52, 16)
-                let holeHeight = min(size.height - printHeight - 6, holeWidth * 0.72)
+                let holeWidth = min(perfPitch * 0.42, 14)
+                let holeHeight = min(size.height - printHeight - 6, holeWidth * 1.65)
                 let y = printHeight + (size.height - printHeight - holeHeight) / 2
                 var x: CGFloat = leader * 0.5
                 while x < size.width {

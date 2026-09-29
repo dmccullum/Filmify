@@ -266,7 +266,7 @@ private struct MiniCanister: View {
 
     var body: some View {
         FilmCanisterView(style: .bulk(name), recipeName: name, height: height)
-            .frame(width: CanisterStyle.designBodyWidth * height / 320 + 2, height: height)
+            .frame(width: CanisterGeometry.width * height / CanisterGeometry.height + 2, height: height)
             .accessibilityHidden(true)
     }
 }
