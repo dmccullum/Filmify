@@ -46,16 +46,17 @@ enum CanisterGeometry {
 }
 
 struct FilmFormat: Equatable {
-    /// Rebate bands as fractions of the strip height.
+    /// Top rebate band as a fraction of the strip height. The bottom band
+    /// matches it plus room for the edge print, so the perforations sit the
+    /// same distance from both edges of the film.
     var bandTop: CGFloat
-    var bandBottom: CGFloat
     var perforatedTop: Bool
     var perforatedBottom: Bool
     var frameAspect: CGFloat
     var perforationsPerFrame: Int
 
     static let thirtyFive = FilmFormat(
-        bandTop: 0.13, bandBottom: 0.17,
+        bandTop: 0.13,
         perforatedTop: true, perforatedBottom: true, frameAspect: 1.5, perforationsPerFrame: 8
     )
 }

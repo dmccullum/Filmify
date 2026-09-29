@@ -457,7 +457,7 @@ private struct StripMetrics {
 
     init(format: FilmFormat, height: CGFloat) {
         bandTop = (height * format.bandTop).rounded()
-        bandBottom = (height * format.bandBottom).rounded()
+        bandBottom = bandTop + FilmRebate.edgePrintHeight
         frameHeight = height - bandTop - bandBottom
         frameWidth = (frameHeight * format.frameAspect).rounded()
         gap = max(8, (frameWidth * 0.06).rounded())
@@ -496,7 +496,7 @@ private struct FilmStrip: View {
             let cosines = curlAngles.map { cos($0 * .pi / 180) }
             let segment = curlWidth / cosines.reduce(0, +)
             let contentWidth = flatWidth + segment * CGFloat(curlAngles.count)
-            let pinch = curlWidth * 0.7 / max(height, 1)
+            let pinch = curlWidth * 0.45 / max(height, 1)
 
             ZStack(alignment: .topLeading) {
                 film(width: contentWidth, height: height, metrics: metrics, isPrimary: true)
@@ -515,27 +515,37 @@ private struct FilmStrip: View {
                         // Recedes symmetrically about the strip's centre line so the
                         // film turns away behind rather than drooping. The pinch
                         // scales with the curl so the corners round off like a
-                        // tight roll instead of tapering into the distance.
-                        .scaleEffect(x: cosines[index], y: 1 - bend * pinch, anchor: .leading)
+                        // tight roll instead of tapering into the distance. Easing
+                        // it in softens the corners without changing the total.
+                        .scaleEffect(x: cosines[index], y: 1 - pow(bend, 0.75) * pinch, anchor: .leading)
                         .offset(x: displayX)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
 
-                // One continuous falloff across the curl so the segments read as a bend.
+                // One continuous falloff across the curl so the segments read as a
+                // bend. It starts a little before the curl so the turn eases in.
                 LinearGradient(
                     stops: [
                         .init(color: .white.opacity(0), location: 0),
-                        .init(color: .white.opacity(0.045), location: 0.24),
-                        .init(color: .black.opacity(0.18), location: 0.5),
-                        .init(color: .black.opacity(0.65), location: 0.8),
+                        // A faint, wide highlight just into the bend, where the
+                        // roll turns toward the light, eased on both sides.
+                        .init(color: .white.opacity(0.01), location: 0.16),
+                        .init(color: .white.opacity(0.022), location: 0.28),
+                        .init(color: .white.opacity(0.025), location: 0.36),
+                        .init(color: .white.opacity(0.01), location: 0.45),
+                        .init(color: .black.opacity(0.06), location: 0.54),
+                        .init(color: .black.opacity(0.18), location: 0.63),
+                        .init(color: .black.opacity(0.36), location: 0.72),
+                        .init(color: .black.opacity(0.6), location: 0.82),
+                        .init(color: .black.opacity(0.82), location: 0.92),
                         .init(color: .black.opacity(0.95), location: 1)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
-                .frame(width: curlWidth + 2, height: height)
-                .offset(x: flatWidth - 1)
+                .frame(width: curlWidth + 10, height: height)
+                .offset(x: flatWidth - 8)
                 .allowsHitTesting(false)
 
                 FilmGate(
@@ -635,6 +645,8 @@ private struct FilmStrip: View {
 }
 
 private struct FilmRebate: View {
+    static let edgePrintHeight: CGFloat = 10
+
     let width: CGFloat
     let height: CGFloat
     let perforated: Bool
@@ -647,7 +659,7 @@ private struct FilmRebate: View {
 
     var body: some View {
         Canvas { context, size in
-            let printHeight: CGFloat = edgePrint == nil ? 0 : 10
+            let printHeight = edgePrint == nil ? 0 : Self.edgePrintHeight
             if perforated, perforationsPerFrame > 0 {
                 let perfPitch = pitch / CGFloat(perforationsPerFrame)
                 let holeWidth = min(perfPitch * 0.42, 14)
