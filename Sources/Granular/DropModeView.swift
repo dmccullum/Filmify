@@ -5,11 +5,13 @@ import SwiftUI
 struct DropModeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var film
 
     /// The job currently sitting in the gate. It stays there for a beat after
     /// finishing so the exposure reads before the film advances.
     @State private var exposure: Exposure?
+    /// Film position in frames, animated from -1 to 0 each time the film winds on.
+    @State private var advance: CGFloat = 0
+    @State private var isAdvancing = false
     private var roll: FilmRoll { .shared }
 
     private struct Exposure: Equatable {
@@ -29,8 +31,10 @@ struct DropModeView: View {
                 recipeName: model.recipeDisplayName,
                 gate: exposure.map { GateExposure(id: $0.jobID, image: roll.thumbnails[$0.jobID]?.image) },
                 frames: exposedFrames,
+                advance: advance,
+                isAdvancing: isAdvancing,
+                framesWound: roll.framesWound,
                 isTargeted: model.isDropTargeted,
-                namespace: film,
                 reduceMotion: reduceMotion,
                 onCanister: { RecipeMenuPresenter.popUp(model: model) },
                 onChoose: { model.chooseImagesForDroplet() }
@@ -94,8 +98,27 @@ struct DropModeView: View {
                 try? await Task.sleep(for: .seconds(remaining))
             }
             guard self.exposure?.jobID == jobID else { return }
-            withAnimation(.spring(duration: 0.7, bounce: 0.12)) {
-                self.exposure = nil
+            windOn()
+        }
+    }
+
+    /// Winds the film on one frame: the exposed frame moves out of the gate
+    /// and the whole strip, perforations and edge print included, travels with it.
+    private func windOn() {
+        var jump = Transaction()
+        jump.disablesAnimations = true
+        withTransaction(jump) {
+            exposure = nil
+            advance = -1
+            isAdvancing = true
+            roll.framesWound += 1
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(16))
+            withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.9)) {
+                advance = 0
+            } completion: {
+                isAdvancing = false
             }
         }
     }
@@ -119,6 +142,8 @@ struct DropModeView: View {
 final class FilmRoll {
     static let shared = FilmRoll()
     var thumbnails: [UUID: FilmThumbnail] = [:]
+    /// How many frames have been wound on, so the edge numbers travel with the film.
+    var framesWound = 0
 }
 
 struct FilmThumbnail: @unchecked Sendable {
@@ -161,8 +186,10 @@ private struct FilmChamber: View {
     let recipeName: String
     let gate: GateExposure?
     let frames: [ExposedFrame]
+    let advance: CGFloat
+    let isAdvancing: Bool
+    let framesWound: Int
     let isTargeted: Bool
-    let namespace: Namespace.ID
     let reduceMotion: Bool
     let onCanister: () -> Void
     let onChoose: () -> Void
@@ -205,8 +232,10 @@ private struct FilmChamber: View {
                     recipeName: recipeName,
                     gate: gate,
                     frames: frames,
+                    advance: advance,
+                    isAdvancing: isAdvancing,
+                    framesWound: framesWound,
                     isTargeted: isTargeted,
-                    namespace: namespace,
                     reduceMotion: reduceMotion,
                     onChoose: onChoose
                 )
@@ -325,16 +354,37 @@ private struct HoverLift<Content: View>: View {
 
 // MARK: - Film strip
 
-/// The back of the film: dark base, perforations and edge print, with the gate
-/// (drop target) followed by the frames already exposed. The far end curls away
-/// toward the implied take-up spool.
+private struct StripMetrics {
+    let bandTop: CGFloat
+    let bandBottom: CGFloat
+    let frameWidth: CGFloat
+    let frameHeight: CGFloat
+    let gap: CGFloat
+    let leader: CGFloat = 38
+
+    var pitch: CGFloat { frameWidth + gap }
+
+    init(format: FilmFormat, height: CGFloat) {
+        bandTop = (height * format.bandTop).rounded()
+        bandBottom = (height * format.bandBottom).rounded()
+        frameHeight = height - bandTop - bandBottom
+        frameWidth = (frameHeight * format.frameAspect).rounded()
+        gap = max(8, (frameWidth * 0.06).rounded())
+    }
+}
+
+/// The back of the film: dark base, perforations and edge print, running under
+/// a fixed gate (the drop target). Exposed frames ride the film as it winds on,
+/// and the far end curls away toward the implied take-up spool.
 private struct FilmStrip: View {
     let format: FilmFormat
     let recipeName: String
     let gate: GateExposure?
     let frames: [ExposedFrame]
+    let advance: CGFloat
+    let isAdvancing: Bool
+    let framesWound: Int
     let isTargeted: Bool
-    let namespace: Namespace.ID
     let reduceMotion: Bool
     let onChoose: () -> Void
 
@@ -344,6 +394,7 @@ private struct FilmStrip: View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let height = geometry.size.height
+            let metrics = StripMetrics(format: format, height: height)
             let curlWidth = min(96, width * 0.2)
             let flatWidth = width - curlWidth
             let cosines = curlAngles.map { cos($0 * .pi / 180) }
@@ -351,7 +402,7 @@ private struct FilmStrip: View {
             let contentWidth = flatWidth + segment * CGFloat(curlAngles.count)
 
             ZStack(alignment: .topLeading) {
-                content(width: contentWidth, height: height, isPrimary: true)
+                film(width: contentWidth, height: height, metrics: metrics, isPrimary: true)
                     .frame(width: flatWidth, height: height, alignment: .leading)
                     .clipped()
 
@@ -359,7 +410,7 @@ private struct FilmStrip: View {
                     let start = flatWidth + segment * CGFloat(index)
                     let displayX = flatWidth + segment * cosines[..<index].reduce(0, +)
                     let bend = 1 - cosines[index]
-                    content(width: contentWidth, height: height, isPrimary: false)
+                    film(width: contentWidth, height: height, metrics: metrics, isPrimary: false)
                         .offset(x: -start)
                         .frame(width: segment, height: height, alignment: .leading)
                         .clipped()
@@ -384,19 +435,27 @@ private struct FilmStrip: View {
                 .frame(width: curlWidth + 2, height: height + 12)
                 .offset(x: flatWidth - 1)
                 .allowsHitTesting(false)
+
+                FilmGate(
+                    isEmpty: gate == nil && !isAdvancing,
+                    showsPrompt: gate == nil && !isAdvancing,
+                    isTargeted: isTargeted,
+                    onChoose: onChoose
+                )
+                .frame(width: metrics.frameWidth, height: metrics.frameHeight)
+                .offset(x: metrics.leader, y: metrics.bandTop)
             }
         }
     }
 
-    private func content(width: CGFloat, height: CGFloat, isPrimary: Bool) -> some View {
-        let bandTop = (height * format.bandTop).rounded()
-        let bandBottom = (height * format.bandBottom).rounded()
-        let frameHeight = height - bandTop - bandBottom
-        let frameWidth = (frameHeight * format.frameAspect).rounded()
-        let gap = max(8, (frameWidth * 0.06).rounded())
-        let leader: CGFloat = 38
-        let pitch = frameWidth + gap
-        let blankCount = max(0, Int(ceil((width - leader) / pitch)) - 1 - frames.count)
+    /// The film itself, laid out one frame early and shifted by `advance`, so
+    /// winding on is a single horizontal move of everything printed on it.
+    private func film(width: CGFloat, height: CGFloat, metrics: StripMetrics, isPrimary: Bool) -> some View {
+        let pitch = metrics.pitch
+        // One frame of slack at each end so the strip never runs short mid-wind.
+        let filmWidth = width + 2 * pitch
+        let blankCount = max(0, Int(ceil((filmWidth - metrics.leader) / pitch)) - 2 - frames.count)
+        let slot = CGSize(width: metrics.frameWidth, height: metrics.frameHeight)
 
         return ZStack(alignment: .topLeading) {
             LinearGradient(
@@ -413,54 +472,63 @@ private struct FilmStrip: View {
 
             VStack(spacing: 0) {
                 FilmRebate(
-                    width: width,
-                    height: bandTop,
+                    width: filmWidth,
+                    height: metrics.bandTop,
                     perforated: format.perforatedTop,
                     perforationsPerFrame: format.perforationsPerFrame,
                     pitch: pitch,
-                    leader: leader,
-                    edgePrint: nil
+                    leader: metrics.leader,
+                    edgePrint: nil,
+                    firstFrame: 0
                 )
-                HStack(spacing: gap) {
-                    FilmGate(
-                        exposure: gate,
-                        isTargeted: isTargeted,
-                        namespace: namespace,
-                        isPrimary: isPrimary,
-                        reduceMotion: reduceMotion,
-                        onChoose: onChoose
-                    )
-                    .frame(width: frameWidth, height: frameHeight)
+                HStack(spacing: metrics.gap) {
+                    // The frame that has just left the canister side of the gate.
+                    Color.clear.frame(width: slot.width, height: slot.height)
+
+                    Group {
+                        if let gate, isPrimary {
+                            ExposureBurn(image: gate.image, reduceMotion: reduceMotion)
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                                .accessibilityLabel("Exposing image")
+                        } else {
+                            Color.clear
+                        }
+                    }
+                    .frame(width: slot.width, height: slot.height)
 
                     ForEach(frames) { frame in
                         NegativeFrame(image: frame.image)
-                            .frame(width: frameWidth, height: frameHeight)
+                            .frame(width: slot.width, height: slot.height)
                             .clipShape(RoundedRectangle(cornerRadius: 2))
-                            .matchedFrame(id: frame.id, in: namespace, enabled: isPrimary)
                             .accessibilityLabel("Processed image")
                     }
 
                     ForEach(0..<blankCount, id: \.self) { _ in
-                        Color.clear.frame(width: frameWidth, height: frameHeight)
+                        Color.clear.frame(width: slot.width, height: slot.height)
                     }
                 }
-                .padding(.leading, leader)
-                .frame(width: width, height: frameHeight, alignment: .leading)
+                .padding(.leading, metrics.leader)
+                .frame(width: filmWidth, height: metrics.frameHeight, alignment: .leading)
                 FilmRebate(
-                    width: width,
-                    height: bandBottom,
+                    width: filmWidth,
+                    height: metrics.bandBottom,
                     perforated: format.perforatedBottom,
                     perforationsPerFrame: format.perforationsPerFrame,
                     pitch: pitch,
-                    leader: leader,
-                    edgePrint: "GRANULAR \(recipeName.uppercased())"
+                    leader: metrics.leader,
+                    edgePrint: "GRANULAR \(recipeName.uppercased())",
+                    // The gate holds the next frame to expose; numbers fall toward the take-up.
+                    firstFrame: framesWound + 2
                 )
             }
+            .frame(width: filmWidth, alignment: .leading)
+            .offset(x: (advance - 1) * pitch)
 
             LinearGradient(colors: [.white.opacity(0.05), .white.opacity(0)], startPoint: .top, endPoint: .center)
                 .allowsHitTesting(false)
         }
-        .frame(width: width, height: height)
+        .frame(width: width, height: height, alignment: .topLeading)
+        .clipped()
     }
 }
 
@@ -472,6 +540,8 @@ private struct FilmRebate: View {
     let pitch: CGFloat
     let leader: CGFloat
     let edgePrint: String?
+    /// Frame number printed at the first slot, counting down slot by slot.
+    let firstFrame: Int
 
     var body: some View {
         Canvas { context, size in
@@ -490,17 +560,21 @@ private struct FilmRebate: View {
                 }
             }
             if let edgePrint {
-                var index = 0
+                var number = firstFrame
                 var x = leader
                 while x < size.width {
-                    let marker = index % 3 == 0 ? "\(edgePrint)   ▸ \(index + 1)" : "▸ \(index + 1)    ▸ \(index + 1)A"
+                    defer {
+                        x += pitch
+                        number -= 1
+                    }
+                    // Nothing is printed on the leader before frame 1.
+                    guard number > 0 else { continue }
+                    let marker = number % 3 == 1 ? "\(edgePrint)   ▸ \(number)" : "▸ \(number)    ▸ \(number)A"
                     let text = Text(marker)
                         .font(.system(size: 7, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color(hex: 0xFFAA6E, opacity: 0.4))
                     let y = perforated ? 1 + printHeight / 2 : size.height / 2
                     context.draw(text, at: CGPoint(x: x + 4, y: y), anchor: .leading)
-                    x += pitch
-                    index += 1
                 }
             }
         }
@@ -550,31 +624,31 @@ private struct NegativeImage: View {
     }
 }
 
+/// The fixed aperture the film runs under: the drop target and its prompt.
 private struct FilmGate: View {
-    let exposure: GateExposure?
+    let isEmpty: Bool
+    let showsPrompt: Bool
     let isTargeted: Bool
-    let namespace: Namespace.ID
-    let isPrimary: Bool
-    let reduceMotion: Bool
     let onChoose: () -> Void
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 3)
                 .fill(isTargeted ? Color(hex: 0x461406, opacity: 0.55) : Color(hex: 0x080402, opacity: 0.45))
+                .opacity(isEmpty ? 1 : 0)
+                .animation(.easeOut(duration: 0.25), value: isEmpty)
+                .allowsHitTesting(false)
 
-            if let exposure {
-                ExposureBurn(image: exposure.image, reduceMotion: reduceMotion)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .matchedFrame(id: exposure.id, in: namespace, enabled: isPrimary)
-                    .accessibilityLabel("Exposing image")
-            } else if isPrimary {
+            if showsPrompt {
                 prompt
+                    .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.25), value: showsPrompt)
         .overlay(
             RoundedRectangle(cornerRadius: 3)
                 .strokeBorder(isTargeted ? FilmBackPalette.signal : Color(hex: 0xB3B8BB), lineWidth: 2.5)
+                .allowsHitTesting(false)
         )
         .shadow(color: isTargeted ? FilmBackPalette.signal.opacity(0.6) : .black.opacity(0.5), radius: isTargeted ? 14 : 3)
     }
@@ -589,9 +663,35 @@ private struct FilmGate: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
             Button("Choose Images…", action: onChoose)
-                .buttonStyle(SteelButtonStyle())
+                .buttonStyle(GateButtonStyle())
         }
         .padding(8)
+    }
+}
+
+/// A quiet, translucent button that sits on the film without competing with it.
+private struct GateButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        GateButtonBody(configuration: configuration)
+    }
+}
+
+private struct GateButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var isHovering = false
+
+    var body: some View {
+        configuration.label
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(Color(hex: 0xFFECDC, opacity: isHovering ? 0.95 : 0.8))
+            .padding(.horizontal, 12)
+            .frame(height: 24)
+            .background(
+                Capsule().fill(Color(hex: 0xFFECDC, opacity: configuration.isPressed ? 0.24 : isHovering ? 0.17 : 0.11))
+            )
+            .contentShape(Capsule())
+            .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.15), value: isHovering)
     }
 }
 
@@ -637,19 +737,6 @@ private struct ExposureBurn: View {
 
     private func burnIn() {
         withAnimation(.easeInOut(duration: 1.1).delay(0.15)) { positive = 0 }
-    }
-}
-
-private extension View {
-    /// Only the primary copy of the strip takes part in the frame-advance
-    /// animation; the copies drawn into the curl just follow along.
-    @ViewBuilder
-    func matchedFrame(id: UUID, in namespace: Namespace.ID, enabled: Bool) -> some View {
-        if enabled {
-            matchedGeometryEffect(id: id, in: namespace)
-        } else {
-            self
-        }
     }
 }
 

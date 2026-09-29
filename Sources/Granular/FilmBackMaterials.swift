@@ -109,35 +109,6 @@ private struct EngravedText: ViewModifier {
     }
 }
 
-struct SteelButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(FilmBackPalette.signal)
-                .frame(width: 6, height: 6)
-                .overlay(Circle().strokeBorder(.black.opacity(0.25), lineWidth: 0.5))
-            configuration.label
-        }
-        .font(.system(size: 11.5, weight: .semibold))
-        .foregroundStyle(Color(hex: 0x1C1C1E))
-        .padding(.horizontal, 13)
-        .frame(height: 26)
-        .background(
-            Capsule().fill(
-                LinearGradient(
-                    colors: [Color(hex: 0xF5F6F7), Color(hex: 0xD3D6D8), Color(hex: 0xB7BBBE)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-        )
-        .overlay(Capsule().strokeBorder(.white.opacity(0.8), lineWidth: 0.5).padding(0.5))
-        .shadow(color: .black.opacity(0.6), radius: 1.5, y: 1)
-        .brightness(configuration.isPressed ? -0.08 : 0)
-        .contentShape(Capsule())
-    }
-}
-
 // MARK: - Canister pieces
 
 struct CylinderShade: View {
