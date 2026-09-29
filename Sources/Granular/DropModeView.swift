@@ -285,8 +285,12 @@ private struct FilmChamber: View {
                     .frame(width: bodyTrailing + 4, height: canisterHeight + 18)
                     .offset(x: 8, y: canisterTop - 9)
 
-                rail(y: stripTop - 9, from: stripLeading + 30, to: width - 70)
-                rail(y: stripTop + stripHeight + 5, from: stripLeading + 30, to: width - 70)
+                let curlStart = width - FilmStrip.curlWidth(for: stripWidth)
+
+                takeUpSlot(leading: curlStart - 14, width: width, top: stripTop - 9, height: stripHeight + 18)
+
+                rail(y: stripTop - 9, from: stripLeading + 30, to: curlStart - 18)
+                rail(y: stripTop + stripHeight + 5, from: stripLeading + 30, to: curlStart - 18)
 
                 FilmStrip(
                     format: format,
@@ -371,6 +375,23 @@ private struct FilmChamber: View {
                 )
                 .allowsHitTesting(false)
         )
+    }
+
+    /// The opening the film curls into on its way to the take-up spool, sunk
+    /// like the canister bay so the strip reads as going into the body.
+    private func takeUpSlot(leading: CGFloat, width: CGFloat, top: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Color(hex: 0x0A0A0A))
+            .shadow(color: .white.opacity(0.04), radius: 0, y: 1)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(.black, lineWidth: 8)
+                    .blur(radius: 6)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            )
+            // Runs off the chamber's right edge, which clips it.
+            .frame(width: width - leading + 20, height: height)
+            .offset(x: leading, y: top)
     }
 
     private func rail(y: CGFloat, from start: CGFloat, to end: CGFloat) -> some View {
@@ -458,18 +479,24 @@ private struct FilmStrip: View {
     let reduceMotion: Bool
     let onChoose: () -> Void
 
-    private let curlAngles: [Double] = stride(from: 6.0, through: 84, by: 6).map { $0 }
+    private let curlAngles: [Double] = stride(from: 4.0, through: 88, by: 4).map { $0 }
+
+    /// How much of the strip's right end bends away behind the chamber wall.
+    static func curlWidth(for width: CGFloat) -> CGFloat {
+        min(30, width * 0.07)
+    }
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let height = geometry.size.height
             let metrics = StripMetrics(format: format, height: height)
-            let curlWidth = min(96, width * 0.2)
+            let curlWidth = Self.curlWidth(for: width)
             let flatWidth = width - curlWidth
             let cosines = curlAngles.map { cos($0 * .pi / 180) }
             let segment = curlWidth / cosines.reduce(0, +)
             let contentWidth = flatWidth + segment * CGFloat(curlAngles.count)
+            let pinch = curlWidth * 0.7 / max(height, 1)
 
             ZStack(alignment: .topLeading) {
                 film(width: contentWidth, height: height, metrics: metrics, isPrimary: true)
@@ -482,10 +509,15 @@ private struct FilmStrip: View {
                     let bend = 1 - cosines[index]
                     film(width: contentWidth, height: height, metrics: metrics, isPrimary: false)
                         .offset(x: -start)
-                        .frame(width: segment, height: height, alignment: .leading)
+                        // A point of overlap hides the seams between slices.
+                        .frame(width: segment + 1, height: height, alignment: .leading)
                         .clipped()
-                        .scaleEffect(x: cosines[index], y: 1 - 0.08 * bend, anchor: .leading)
-                        .offset(x: displayX, y: 10 * bend)
+                        // Recedes symmetrically about the strip's centre line so the
+                        // film turns away behind rather than drooping. The pinch
+                        // scales with the curl so the corners round off like a
+                        // tight roll instead of tapering into the distance.
+                        .scaleEffect(x: cosines[index], y: 1 - bend * pinch, anchor: .leading)
+                        .offset(x: displayX)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -494,15 +526,15 @@ private struct FilmStrip: View {
                 LinearGradient(
                     stops: [
                         .init(color: .white.opacity(0), location: 0),
-                        .init(color: .white.opacity(0.06), location: 0.12),
-                        .init(color: .black.opacity(0.25), location: 0.35),
-                        .init(color: .black.opacity(0.7), location: 0.75),
+                        .init(color: .white.opacity(0.045), location: 0.24),
+                        .init(color: .black.opacity(0.18), location: 0.5),
+                        .init(color: .black.opacity(0.65), location: 0.8),
                         .init(color: .black.opacity(0.95), location: 1)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
-                .frame(width: curlWidth + 2, height: height + 12)
+                .frame(width: curlWidth + 2, height: height)
                 .offset(x: flatWidth - 1)
                 .allowsHitTesting(false)
 
