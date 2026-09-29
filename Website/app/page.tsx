@@ -28,7 +28,7 @@ export default function Home() {
           <img src={asset("/film-canister-hero.png")} alt="A 35mm film canister with a curling strip of film" />
         </figure>
         <div className="opening-action">
-          <p>A native macOS app for adding film-like halation, grain, and more to your images. Pick a recipe, drop your photos on the film, and they’re done.</p>
+          <p>A native macOS app for adding film-like halation, grain, and more to your images.</p>
           <a className="stamp stamp-yellow" href="https://github.com/dmccullum/Granular">GET GRANULAR <b>↗</b></a>
         </div>
       </section>
