@@ -12,14 +12,22 @@ struct ContentView: View {
         ZStack {
             switch model.operationMode {
             case .drop:
-                DropModeView()
-                    .transition(modeContentTransition)
+                Group {
+                    if model.isSettlingInstantWindow {
+                        // The bare camera body while the window shrinks to size.
+                        AlloySurface().ignoresSafeArea()
+                    } else {
+                        DropModeView()
+                    }
+                }
+                .transition(modeContentTransition)
             case .edit:
                 EditModeView()
                     .transition(modeContentTransition)
             }
         }
         .animation(modeContentAnimation, value: model.operationMode)
+        .animation(.easeOut(duration: 0.22), value: model.isSettlingInstantWindow)
         .frame(minWidth: 620, minHeight: 340)
         .overlay(alignment: .topTrailing) {
             if model.operationMode == .edit {

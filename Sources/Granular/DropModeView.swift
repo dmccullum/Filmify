@@ -44,7 +44,7 @@ struct DropModeView: View {
 
             FilmBackStatusBar()
         }
-        .background(BrushedSteel().ignoresSafeArea())
+        .background(AlloySurface().ignoresSafeArea())
         .contentShape(Rectangle())
         .dropDestination(for: URL.self) { urls, _ in
             Task { await model.processInstantly(urls) }

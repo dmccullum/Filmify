@@ -64,6 +64,9 @@ final class AppModel {
     var showOriginal = false
     var activeCenterTarget: EffectCenterTarget?
     var isDropTargeted = false
+    /// True while the window shrinks into Instant mode, so the film chamber
+    /// only appears once the window has reached its final size.
+    var isSettlingInstantWindow = false
     var outputOptions = OutputOptions()
 
     var dropOutputFolder: URL?
@@ -180,6 +183,9 @@ final class AppModel {
         if operationMode == .drop, jobs.isEmpty {
             statusMessage = "Ready"
         }
+        if operationMode == .drop {
+            isSettlingInstantWindow = true
+        }
         scheduleWindowResize(for: operationMode, animated: true)
     }
 
@@ -191,6 +197,9 @@ final class AppModel {
             }
             guard !Task.isCancelled, let self, self.operationMode == mode else { return }
             self.resizeWindow(for: mode, animated: animated)
+            if mode == .drop {
+                self.isSettlingInstantWindow = false
+            }
         }
     }
 
@@ -221,7 +230,27 @@ final class AppModel {
             )
         }
 
+        // Instant mode keeps a fixed height and a free width. Lift the limit
+        // before growing into Edit mode; apply it once the window has shrunk.
+        if mode == .edit {
+            applySizeLimits(for: mode, contentHeight: contentSize.height, to: window)
+        }
         window.setFrame(targetFrame, display: true, animate: animated)
+        if mode == .drop {
+            applySizeLimits(for: mode, contentHeight: contentSize.height, to: window)
+        }
+    }
+
+    private func applySizeLimits(for mode: OperationMode, contentHeight: CGFloat, to window: NSWindow) {
+        let unlimited = CGFloat.greatestFiniteMagnitude
+        switch mode {
+        case .drop:
+            window.contentMinSize = NSSize(width: 620, height: contentHeight)
+            window.contentMaxSize = NSSize(width: unlimited, height: contentHeight)
+        case .edit:
+            window.contentMinSize = NSSize(width: 620, height: 340)
+            window.contentMaxSize = NSSize(width: unlimited, height: unlimited)
+        }
     }
 
     func selectRecipe(_ recipe: FilmRecipe) {

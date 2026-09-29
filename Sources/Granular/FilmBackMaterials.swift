@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Surfaces for the Instant-mode "camera back": brushed steel for the chrome,
+// Surfaces for the Instant-mode "camera back": the alloy body for the chrome,
 // and the printed tin / paper of the film canisters that stand in for recipes.
 
 extension Color {
@@ -37,8 +37,9 @@ struct SeededGenerator: RandomNumberGenerator {
     }
 }
 
-/// Stainless steel in light appearance, black chrome in dark.
-struct BrushedSteel: View {
+/// The camera body: bead-blasted aluminum in light appearance, dark
+/// magnesium in dark. A fine, even grain rather than a brushed direction.
+struct AlloySurface: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -46,48 +47,57 @@ struct BrushedSteel: View {
         ZStack {
             LinearGradient(
                 colors: isDark
-                    ? [Color(hex: 0x4A4D50), Color(hex: 0x36393B), Color(hex: 0x2A2C2E)]
-                    : [Color(hex: 0xE9EBEC), Color(hex: 0xD1D4D6), Color(hex: 0xBDC1C4)],
+                    ? [Color(hex: 0x2A2B2D), Color(hex: 0x202123), Color(hex: 0x19191B)]
+                    : [Color(hex: 0xDCDEE0), Color(hex: 0xCDD0D3), Color(hex: 0xBFC2C6)],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            Canvas { context, size in
-                var rng = SeededGenerator(seed: 11)
-                var y: CGFloat = 0
-                while y < size.height {
-                    let height = CGFloat.random(in: 0.4...1.1, using: &rng)
-                    var x: CGFloat = -40
-                    while x < size.width {
-                        let length = CGFloat.random(in: 60...420, using: &rng)
-                        let light = Bool.random(using: &rng)
-                        let opacity = Double.random(in: 0.025...0.09, using: &rng)
-                        context.fill(
-                            Path(CGRect(x: x, y: y, width: length, height: height)),
-                            with: .color(light ? .white.opacity(opacity) : .black.opacity(opacity * 0.7))
-                        )
-                        x += length + CGFloat.random(in: 0...30, using: &rng)
-                    }
-                    y += height + CGFloat.random(in: 0.2...1.4, using: &rng)
-                }
-            }
-            LinearGradient(
-                stops: [
-                    .init(color: .white.opacity(0), location: 0),
-                    .init(color: .white.opacity(isDark ? 0.10 : 0.30), location: 0.3),
-                    .init(color: .white.opacity(0), location: 0.47),
-                    .init(color: .white.opacity(isDark ? 0.05 : 0.14), location: 0.7),
-                    .init(color: .white.opacity(0), location: 0.86)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
+            Image(decorative: AlloyGrain.tile, scale: 2)
+                .resizable(resizingMode: .tile)
+                .opacity(isDark ? 0.55 : 0.8)
+            // A soft, broad sheen, as on a satin-finished casting.
+            RadialGradient(
+                colors: [.white.opacity(isDark ? 0.05 : 0.22), .white.opacity(0)],
+                center: UnitPoint(x: 0.3, y: 0),
+                startRadius: 0,
+                endRadius: 520
             )
         }
         .allowsHitTesting(false)
     }
 }
 
+/// A seeded tile of fine light and dark specks for the blasted-metal grain.
+@MainActor
+private enum AlloyGrain {
+    static let tile: CGImage = {
+        let size = 192
+        var rng = SeededGenerator(seed: 23)
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        for index in 0..<(size * size) {
+            let light = Bool.random(using: &rng)
+            let alpha = Int.random(in: 0...34, using: &rng)
+            let value = light ? alpha : 0
+            pixels[index * 4] = UInt8(value)
+            pixels[index * 4 + 1] = UInt8(value)
+            pixels[index * 4 + 2] = UInt8(value)
+            pixels[index * 4 + 3] = UInt8(alpha)
+        }
+        let context = CGContext(
+            data: &pixels,
+            width: size,
+            height: size,
+            bitsPerComponent: 8,
+            bytesPerRow: size * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        return context.makeImage()!
+    }()
+}
+
 extension View {
-    /// Text stamped into the steel.
+    /// Text stamped into the metal.
     func engraved() -> some View {
         modifier(EngravedText())
     }
