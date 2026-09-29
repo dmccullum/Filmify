@@ -4,10 +4,10 @@ import SwiftUI
 /// How a recipe's film is packaged: each built-in recipe gets its own canister,
 /// and saved or modified recipes are bulk-loaded with a hand-written tape label.
 enum CanisterStyle: Hashable {
-    case classic35
-    case extra35
-    case roll120
-    case cine16
+    case classic
+    case extra
+    case clean
+    case soft
     case bulk(String)
 
     init(recipe: FilmRecipe, isModified: Bool) {
@@ -16,30 +16,19 @@ enum CanisterStyle: Hashable {
             return
         }
         switch recipe.id {
-        case "classic-35": self = .classic35
-        case "extra-35": self = .extra35
-        case "clean-120": self = .roll120
-        case "soft-16": self = .cine16
+        case "classic-35": self = .classic
+        case "extra-35": self = .extra
+        case "clean-120": self = .clean
+        case "soft-16": self = .soft
         default: self = .bulk(recipe.name)
         }
     }
 
-    var format: FilmFormat {
-        switch self {
-        case .roll120: .oneTwenty
-        case .cine16: .sixteen
-        default: .thirtyFive
-        }
-    }
+    /// Every recipe is loaded the same way; only the printing differs.
+    var format: FilmFormat { .thirtyFive }
 
     /// Canister body width at the 320 pt design height.
-    var designBodyWidth: CGFloat {
-        switch self {
-        case .roll120: 146
-        case .cine16: 104
-        default: 150
-        }
-    }
+    static let designBodyWidth: CGFloat = 150
 }
 
 struct FilmFormat: Equatable {
@@ -56,14 +45,6 @@ struct FilmFormat: Equatable {
     static let thirtyFive = FilmFormat(
         stripFraction: 0.66, bandTop: 0.13, bandBottom: 0.13,
         perforatedTop: true, perforatedBottom: true, frameAspect: 1.5, perforationsPerFrame: 8
-    )
-    static let oneTwenty = FilmFormat(
-        stripFraction: 0.74, bandTop: 0.055, bandBottom: 0.055,
-        perforatedTop: false, perforatedBottom: false, frameAspect: 1, perforationsPerFrame: 0
-    )
-    static let sixteen = FilmFormat(
-        stripFraction: 0.56, bandTop: 0.07, bandBottom: 0.19,
-        perforatedTop: false, perforatedBottom: true, frameAspect: 4 / 3, perforationsPerFrame: 2
     )
 }
 
@@ -84,11 +65,11 @@ struct FilmCanisterView: View {
     var body: some View {
         Group {
             switch style {
-            case .classic35: classic
-            case .extra35: extra
-            case .roll120: roll
-            case .cine16: cine
-            case .bulk(let label): bulk(label)
+            case .classic: classicTin
+            case .extra: extraTin
+            case .clean: cleanTin
+            case .soft: softTin
+            case .bulk(let label): bulkTin(label)
             }
         }
         .compositingGroup()
@@ -97,7 +78,7 @@ struct FilmCanisterView: View {
 
     // MARK: Styles
 
-    private var classic: some View {
+    private var classicTin: some View {
         tin(bodyWidth: 150, steelCaps: false) {
             VStack(spacing: 0) {
                 wordmark(color: yellow).frame(height: 22 * s).background(FilmBackPalette.ink)
@@ -110,7 +91,7 @@ struct FilmCanisterView: View {
         }
     }
 
-    private var extra: some View {
+    private var extraTin: some View {
         tin(bodyWidth: 150, steelCaps: false) {
             VStack(spacing: 0) {
                 HazardStripes().frame(height: 20 * s)
@@ -123,12 +104,12 @@ struct FilmCanisterView: View {
         }
     }
 
-    private var cine: some View {
-        tin(bodyWidth: 104, steelCaps: true) {
+    private var softTin: some View {
+        tin(bodyWidth: 150, steelCaps: true) {
             VStack(spacing: 0) {
                 wordmark(color: teal, size: 9).frame(height: 20 * s).background(paleTeal)
                 FilmBackPalette.signal.frame(height: 3 * s)
-                nameColumn(nameColor: paleTeal, detail: "16MM CINE", detailColor: Color(hex: 0xBFE0D5))
+                nameColumn(nameColor: paleTeal, detail: "SOFT GLOW · 36 EXP", detailColor: Color(hex: 0xBFE0D5))
                 formatBlock("16", color: teal).frame(height: 42 * s).background(paleTeal)
                 teal.frame(height: 6 * s)
             }
@@ -136,38 +117,20 @@ struct FilmCanisterView: View {
         }
     }
 
-    private var roll: some View {
-        VStack(spacing: 0) {
-            smoothBlack.frame(width: 24 * s, height: 10 * s)
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 3 * s, topTrailingRadius: 3 * s))
-            smoothBlack.frame(width: 158 * s, height: 12 * s).clipShape(RoundedRectangle(cornerRadius: 3 * s))
-            ZStack {
-                VStack(spacing: 0) {
-                    wordmark(color: .white).frame(height: 36 * s).background(blue)
-                    FilmBackPalette.ink.frame(height: 3 * s)
-                    nameColumn(nameColor: blue, detail: "ROLL FILM · 12 EXP", detailColor: FilmBackPalette.ink)
-                    formatBlock("120", color: cream).frame(height: 46 * s).background(FilmBackPalette.ink)
-                    blue.frame(height: 14 * s)
-                }
-                .background(
-                    Canvas { context, size in
-                        context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(cream))
-                        var y: CGFloat = 0
-                        while y < size.height {
-                            context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 0.6)), with: .color(.black.opacity(0.05)))
-                            y += 5 * s
-                        }
-                    }
-                )
-                CylinderShade(strength: 0.85)
+    private var cleanTin: some View {
+        tin(bodyWidth: 150, steelCaps: false) {
+            VStack(spacing: 0) {
+                wordmark(color: .white).frame(height: 22 * s).background(blue)
+                FilmBackPalette.ink.frame(height: 3 * s)
+                nameColumn(nameColor: blue, detail: "FINE GRAIN · 36 EXP", detailColor: FilmBackPalette.ink)
+                formatBlock("120", color: cream).frame(height: 46 * s).background(FilmBackPalette.ink)
+                blue.frame(height: 8 * s)
             }
-            .frame(width: 146 * s, height: 272 * s)
-            .clipped()
-            smoothBlack.frame(width: 158 * s, height: 12 * s).clipShape(RoundedRectangle(cornerRadius: 3 * s))
+            .background(cream)
         }
     }
 
-    private func bulk(_ label: String) -> some View {
+    private func bulkTin(_ label: String) -> some View {
         tin(bodyWidth: 150, steelCaps: true) {
             ZStack {
                 Color(hex: 0x1B1B1B)
@@ -190,7 +153,7 @@ struct FilmCanisterView: View {
                 VStack {
                     Spacer()
                     HStack(spacing: 5 * s) {
-                        Text("35 · BULK")
+                        Text("BULK LOAD")
                             .font(.system(size: 12 * s, weight: .bold).width(.condensed))
                             .tracking(2.6 * s)
                         chevron
@@ -211,8 +174,9 @@ struct FilmCanisterView: View {
         @ViewBuilder printed: () -> Printed
     ) -> some View {
         let bodyHeight: CGFloat = 266
+        let steelNub = bodyWidth * 0.2
         return VStack(spacing: 0) {
-            cap(width: steelCaps ? bodyWidth * 0.2 : 34, height: 14, steel: steelCaps, top: true)
+            cap(width: steelCaps ? steelNub : 34, height: 14, steel: steelCaps, top: true)
             cap(width: bodyWidth - 8, height: 20, steel: steelCaps, top: true)
             ZStack {
                 printed()
@@ -257,13 +221,6 @@ struct FilmCanisterView: View {
                 topTrailingRadius: top ? big : small
             )
         )
-    }
-
-    private var smoothBlack: some View {
-        ZStack {
-            Color(hex: 0x0A0A0A)
-            CylinderShade(strength: 0.8)
-        }
     }
 
     private func wordmark(color: Color, size: CGFloat = 10) -> some View {

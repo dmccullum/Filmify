@@ -165,10 +165,9 @@ private struct FilmChamber: View {
             let format = style.format
             let canisterHeight = height - 26
             let scale = canisterHeight / 320
-            let bodyWidth = style.designBodyWidth * scale
-            let canisterWidth = (style == .roll120 ? 158 : style.designBodyWidth) * scale
+            let canisterWidth = CanisterStyle.designBodyWidth * scale
             let canisterLeading: CGFloat = 20
-            let bodyTrailing = canisterLeading + (canisterWidth + bodyWidth) / 2
+            let bodyTrailing = canisterLeading + canisterWidth
             let stripLeading = bodyTrailing - 10 * scale
             let stripHeight = (height * format.stripFraction).rounded()
             let stripWidth = width - stripLeading
