@@ -36,6 +36,21 @@ public final class ImageExporter: @unchecked Sendable {
         ])
     }
 
+    /// Renders an image once into a half-float bitmap, so later renders start
+    /// from decoded pixels instead of decoding the file again.
+    public func materialize(_ image: CIImage) throws -> CIImage {
+        let colorSpace = CGColorSpace(name: CGColorSpace.extendedLinearITUR_2020)!
+        guard let cgImage = context.createCGImage(
+            image,
+            from: image.extent.integral,
+            format: .RGBAh,
+            colorSpace: colorSpace
+        ) else {
+            throw ImageExporterError.imageCreationFailed
+        }
+        return CIImage(cgImage: cgImage)
+    }
+
     /// Renders straight to a bitmap for display; encoding a preview to a file
     /// format and decoding it again costs several times the render itself.
     public func previewImage(for image: CIImage, maximumDimension: CGFloat = 1_600) throws -> CGImage {

@@ -122,6 +122,7 @@ final class AppModel {
 
     private var processingService: ImageProcessingService?
     private var previewTask: Task<Void, Never>?
+    private var previewNeedsRender = false
     private var stockThumbnailTask: Task<Void, Never>?
     private var stockThumbnailKey: StockThumbnailKey?
     private static let stockThumbnailPixelSize = 224
@@ -501,6 +502,7 @@ final class AppModel {
 
         retainSecurityScope(for: url)
         previewTask?.cancel()
+        previewTask = nil
         selectedSourceURL = url
         sourcePreview = image
         processedPreview = nil
@@ -655,31 +657,40 @@ final class AppModel {
         }
     }
 
+    /// Renders the preview live: one render at a time, and any changes made
+    /// while it runs are picked up as soon as it finishes, so dragging a
+    /// slider never queues up stale renders.
     func schedulePreview() {
-        guard operationMode == .edit,
-              let selectedSourceURL,
-              let processingService else { return }
-        previewTask?.cancel()
-        let recipe = recipe
+        guard operationMode == .edit, selectedSourceURL != nil, processingService != nil else {
+            return
+        }
         isRenderingPreview = true
-        previewTask = Task {
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else { return }
+        previewNeedsRender = true
+        guard previewTask == nil else { return }
+        previewTask = Task { await renderPendingPreviews() }
+    }
+
+    private func renderPendingPreviews() async {
+        while previewNeedsRender, !Task.isCancelled,
+              let sourceURL = selectedSourceURL, let processingService {
+            previewNeedsRender = false
             do {
                 let image = try await processingService.renderPreview(
-                    sourceURL: selectedSourceURL,
+                    sourceURL: sourceURL,
                     recipe: recipe,
                     maximumDimension: 2_400
                 )
                 guard !Task.isCancelled else { return }
                 processedPreview = NSImage(cgImage: image, size: .zero)
-                isRenderingPreview = false
-                statusMessage = selectedSourceURL.lastPathComponent
+                statusMessage = sourceURL.lastPathComponent
             } catch {
-                isRenderingPreview = false
+                guard !Task.isCancelled else { return }
                 statusMessage = "Preview failed: \(error.localizedDescription)"
             }
         }
+        guard !Task.isCancelled else { return }
+        isRenderingPreview = false
+        previewTask = nil
     }
 
     /// Renders a small Film Tone preview of every stock for the stock picker,

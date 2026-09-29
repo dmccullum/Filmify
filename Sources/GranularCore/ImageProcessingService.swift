@@ -17,12 +17,33 @@ public actor ImageProcessingService {
         recipe: FilmRecipe,
         maximumDimension: CGFloat = 1_600
     ) throws -> CGImage {
-        let source = try renderer.loadImage(at: sourceURL)
+        let source = try previewSource(for: sourceURL, maximumDimension: maximumDimension)
         let rendered = try renderer.render(
             source, recipe: recipe, previewMaximumDimension: maximumDimension
         )
         return try exporter.previewImage(for: rendered, maximumDimension: maximumDimension)
     }
+
+    /// The open image decoded once at preview size. Every effect scales with
+    /// the image's short edge, so rendering from it matches the full-size look.
+    private func previewSource(for url: URL, maximumDimension: CGFloat) throws -> CIImage {
+        if let cached = previewSourceCache,
+           cached.url == url,
+           cached.maximumDimension == maximumDimension {
+            return cached.image
+        }
+        let source = try renderer.loadImage(at: url)
+        let scale = min(1, maximumDimension / max(source.extent.width, source.extent.height))
+        let scaled = scale < 1
+            ? source.samplingLinear()
+                .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            : source
+        let image = try exporter.materialize(scaled)
+        previewSourceCache = (url, maximumDimension, image)
+        return image
+    }
+
+    private var previewSourceCache: (url: URL, maximumDimension: CGFloat, image: CIImage)?
 
     /// Renders a small Film Tone preview of one stock for the stock picker. With
     /// no source image, a generated color swatch stands in.
