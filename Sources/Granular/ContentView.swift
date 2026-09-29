@@ -31,6 +31,7 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
+        .toolbarBackgroundVisibility(model.operationMode == .drop ? .hidden : .automatic, for: .windowToolbar)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 ModePicker()
@@ -138,6 +139,23 @@ struct RecipeMenu: View {
     }
 }
 
+/// Shows the recipe menu from a custom control, such as Instant mode's film canister.
+@MainActor
+enum RecipeMenuPresenter {
+    static func popUp(model: AppModel) {
+        let coordinator = NativeRecipeMenuButton.Coordinator(model: model)
+        coordinator.update(
+            model: model,
+            selectedRecipeID: model.selectedRecipeID,
+            savedRecipes: model.savedRecipes,
+            operationMode: model.operationMode,
+            isSelectedRecipeCustom: model.isSelectedRecipeCustom,
+            isRecipeModified: model.isRecipeModified
+        )
+        coordinator.showMenuAtMouseLocation()
+    }
+}
+
 @MainActor
 private struct NativeRecipeMenuButton: NSViewRepresentable {
     let model: AppModel
@@ -239,6 +257,10 @@ private struct NativeRecipeMenuButton: NSViewRepresentable {
             self.operationMode = operationMode
             self.isSelectedRecipeCustom = isSelectedRecipeCustom
             self.isRecipeModified = isRecipeModified
+        }
+
+        func showMenuAtMouseLocation() {
+            makeMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         }
 
         @objc func showMenu(_ sender: NSButton) {
