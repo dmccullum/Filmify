@@ -12,6 +12,9 @@ struct DropModeView: View {
     /// Film position in frames, animated from -1 to 0 each time the film winds on.
     @State private var advance: CGFloat = 0
     @State private var isAdvancing = false
+    /// Film loading, played when Instant mode settles and reversed when leaving it.
+    @State private var isCanisterSeated = false
+    @State private var filmOut: CGFloat = 0
     private var roll: FilmRoll { .shared }
 
     private struct Exposure: Equatable {
@@ -34,6 +37,8 @@ struct DropModeView: View {
                 advance: advance,
                 isAdvancing: isAdvancing,
                 framesWound: roll.framesWound,
+                isCanisterSeated: isCanisterSeated,
+                filmOut: filmOut,
                 isTargeted: model.isDropTargeted,
                 reduceMotion: reduceMotion,
                 onCanister: { RecipeMenuPresenter.popUp(model: model) },
@@ -56,6 +61,53 @@ struct DropModeView: View {
         }
         .onChange(of: LeadJobKey(id: model.jobs.first?.id, state: model.jobs.first?.state)) { _, _ in
             leadJobChanged()
+        }
+        .onAppear {
+            if model.isFilmLoaded {
+                isCanisterSeated = true
+                filmOut = 1
+            }
+        }
+        .onChange(of: model.isFilmLoaded) { _, isLoaded in
+            if isLoaded {
+                loadFilm()
+            } else {
+                rewindFilm()
+            }
+        }
+    }
+
+    /// The canister drops into its pocket, then the film pulls out across the gate.
+    private func loadFilm() {
+        guard !reduceMotion else {
+            withAnimation(.easeOut(duration: 0.2)) {
+                isCanisterSeated = true
+                filmOut = 1
+            }
+            return
+        }
+        withAnimation(.spring(duration: 0.45, bounce: 0.22)) {
+            isCanisterSeated = true
+        }
+        withAnimation(.easeOut(duration: 0.5).delay(0.22)) {
+            filmOut = 1
+        }
+    }
+
+    /// The film winds back into the canister, then the canister lifts out.
+    private func rewindFilm() {
+        guard !reduceMotion else {
+            withAnimation(.easeIn(duration: 0.15)) {
+                isCanisterSeated = false
+                filmOut = 0
+            }
+            return
+        }
+        withAnimation(.easeIn(duration: 0.3)) {
+            filmOut = 0
+        }
+        withAnimation(.easeIn(duration: 0.2).delay(0.26)) {
+            isCanisterSeated = false
         }
     }
 
@@ -189,6 +241,8 @@ private struct FilmChamber: View {
     let advance: CGFloat
     let isAdvancing: Bool
     let framesWound: Int
+    let isCanisterSeated: Bool
+    let filmOut: CGFloat
     let isTargeted: Bool
     let reduceMotion: Bool
     let onCanister: () -> Void
@@ -240,6 +294,12 @@ private struct FilmChamber: View {
                     onChoose: onChoose
                 )
                 .frame(width: stripWidth, height: stripHeight)
+                // Loading: the film slides out of the canister's lip toward the take-up.
+                .offset(x: -(1 - filmOut) * 60)
+                .mask(alignment: .leading) {
+                    Rectangle().frame(width: stripWidth * filmOut)
+                }
+                .allowsHitTesting(filmOut == 1)
                 .offset(x: stripLeading, y: (height - stripHeight) / 2)
 
                 if isTargeted {
@@ -266,6 +326,9 @@ private struct FilmChamber: View {
                 .help("Choose or save a film recipe")
                 .accessibilityLabel("Recipe: \(recipeName)")
                 .accessibilityHint("Shows the recipe menu")
+                .offset(y: isCanisterSeated ? 0 : -canisterHeight * 0.4)
+                .scaleEffect(isCanisterSeated ? 1 : 1.04)
+                .opacity(isCanisterSeated ? 1 : 0)
                 .id(style)
                 .transition(
                     .asymmetric(

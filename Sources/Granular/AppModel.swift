@@ -58,13 +58,21 @@ struct ProcessingJob: Identifiable {
 final class AppModel {
     var operationMode: OperationMode = .drop {
         didSet {
-            // Cover the window with the bare body in the same update as the
-            // switch, so the new mode never shows at the old window size.
+            // Mark the window as settling in the same update as the switch, so
+            // the new mode never shows at the old window size.
             if operationMode != oldValue {
                 isSettlingWindow = true
             }
+            if operationMode != .drop {
+                isFilmLoaded = false
+            }
         }
     }
+    /// The mode being switched to while Instant mode rewinds its film.
+    var pendingMode: OperationMode?
+    /// Whether film is loaded in Instant mode's camera back. It loads once the
+    /// window has settled, and rewinds before the switch to Edit.
+    var isFilmLoaded = false
     var recipe: FilmRecipe = .classic35
     var selectedRecipeID = FilmRecipe.classic35.id
     var savedRecipes: [FilmRecipe] = []
@@ -72,8 +80,8 @@ final class AppModel {
     var showOriginal = false
     var activeCenterTarget: EffectCenterTarget?
     var isDropTargeted = false
-    /// True while the window resizes between modes; the content waits under a
-    /// plain alloy plate until the window has reached its final size.
+    /// True while the window resizes between modes. The camera body stays up
+    /// with the film unloaded until the window has reached its final size.
     var isSettlingWindow = false
     var outputOptions = OutputOptions()
 
@@ -97,6 +105,7 @@ final class AppModel {
     private var processingService: ImageProcessingService?
     private var previewTask: Task<Void, Never>?
     private var resizeTask: Task<Void, Never>?
+    private var modeRequestTask: Task<Void, Never>?
     private var monitor: WatchedFolderMonitor?
     private var activeSecurityURLs: [URL] = []
 
@@ -187,6 +196,33 @@ final class AppModel {
         }.first
     }
 
+    /// Switches modes, rewinding Instant mode's film first when leaving it.
+    func requestMode(_ mode: OperationMode) {
+        modeRequestTask?.cancel()
+        guard mode != operationMode else {
+            // Changed our mind mid-rewind: load the film back in.
+            pendingMode = nil
+            if mode == .drop, !isSettlingWindow {
+                isFilmLoaded = true
+            }
+            return
+        }
+        guard operationMode == .drop, isFilmLoaded,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            pendingMode = nil
+            operationMode = mode
+            return
+        }
+        pendingMode = mode
+        isFilmLoaded = false
+        modeRequestTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(480))
+            guard !Task.isCancelled, let self else { return }
+            self.pendingMode = nil
+            self.operationMode = mode
+        }
+    }
+
     func modeDidChange() {
         if operationMode == .drop, jobs.isEmpty {
             statusMessage = "Ready"
@@ -198,15 +234,20 @@ final class AppModel {
         resizeTask?.cancel()
         resizeTask = Task { [weak self] in
             if animated {
-                try? await Task.sleep(for: .milliseconds(55))
+                // Let the camera body draw before the window starts moving.
+                try? await Task.sleep(for: .milliseconds(20))
             }
             guard !Task.isCancelled, let self, self.operationMode == mode else { return }
-            self.resizeWindow(for: mode, animated: animated)
+            await self.resizeWindow(for: mode, animated: animated)
+            guard !Task.isCancelled, self.operationMode == mode else { return }
             self.isSettlingWindow = false
+            if mode == .drop {
+                self.isFilmLoaded = true
+            }
         }
     }
 
-    private func resizeWindow(for mode: OperationMode, animated: Bool) {
+    private func resizeWindow(for mode: OperationMode, animated: Bool) async {
         guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) else { return }
         var contentSize = mode == .drop
             ? NSSize(width: 700, height: 400)
@@ -238,7 +279,21 @@ final class AppModel {
         if mode == .edit {
             applySizeLimits(for: mode, contentHeight: contentSize.height, to: window)
         }
-        window.setFrame(targetFrame, display: true, animate: animated)
+        if animated {
+            // Animate through the window's animator rather than the blocking
+            // setFrame(animate:), so SwiftUI keeps drawing while the size changes.
+            await withCheckedContinuation { continuation in
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.34
+                    context.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0.7, 0.2, 1)
+                    window.animator().setFrame(targetFrame, display: true)
+                } completionHandler: {
+                    continuation.resume()
+                }
+            }
+        } else {
+            window.setFrame(targetFrame, display: true)
+        }
         if mode == .drop {
             applySizeLimits(for: mode, contentHeight: contentSize.height, to: window)
         }

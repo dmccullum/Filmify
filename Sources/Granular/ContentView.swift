@@ -9,29 +9,23 @@ struct ContentView: View {
     var body: some View {
         @Bindable var model = model
 
+        // The camera body stays up, film unloaded, while the window resizes
+        // between modes; the editor only appears once the window is full size.
+        let showsCameraBody = model.operationMode == .drop || model.isSettlingWindow
+
         ZStack {
-            switch model.operationMode {
-            case .drop:
+            if showsCameraBody {
                 DropModeView()
-                    .transition(modeContentTransition)
-            case .edit:
+                    .transition(.opacity)
+            } else {
                 EditModeView()
                     .transition(modeContentTransition)
             }
-
-            if model.isSettlingWindow {
-                // A solid alloy plate covers the window while it resizes, then
-                // fades away to reveal the new mode at its final size.
-                AlloySurface()
-                    .ignoresSafeArea()
-                    .transition(.asymmetric(insertion: .identity, removal: .opacity))
-            }
         }
-        .animation(modeContentAnimation, value: model.operationMode)
-        .animation(.easeOut(duration: 0.25), value: model.isSettlingWindow)
+        .animation(modeContentAnimation, value: showsCameraBody)
         .frame(minWidth: 620, minHeight: 340)
         .overlay(alignment: .topTrailing) {
-            if model.operationMode == .edit, !model.isSettlingWindow {
+            if !showsCameraBody {
                 Rectangle()
                     .fill(Color(nsColor: .separatorColor))
                     .frame(width: 1)
@@ -40,10 +34,10 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
-        .toolbarBackgroundVisibility(model.operationMode == .drop || model.isSettlingWindow ? .hidden : .automatic, for: .windowToolbar)
-        .toolbar(removing: model.operationMode == .drop ? .title : nil)
+        .toolbarBackgroundVisibility(showsCameraBody ? .hidden : .automatic, for: .windowToolbar)
+        .toolbar(removing: showsCameraBody ? .title : nil)
         .toolbar {
-            if model.operationMode == .drop {
+            if showsCameraBody {
                 ToolbarItem(placement: .principal) {
                     CameraNameplate()
                 }
@@ -104,9 +98,13 @@ private struct ModePicker: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        @Bindable var model = model
-
-        Picker("Mode", selection: $model.operationMode) {
+        Picker(
+            "Mode",
+            selection: Binding(
+                get: { model.pendingMode ?? model.operationMode },
+                set: { model.requestMode($0) }
+            )
+        ) {
             ForEach(OperationMode.allCases) { mode in
                 Text(mode.rawValue).tag(mode)
             }
