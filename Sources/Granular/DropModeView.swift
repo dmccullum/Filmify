@@ -596,7 +596,8 @@ private struct FilmStrip: View {
                     pitch: pitch,
                     leader: metrics.leader,
                     edgePrint: nil,
-                    firstFrame: 0
+                    firstFrame: 0,
+                    namedFrame: 0
                 )
                 HStack(spacing: metrics.gap) {
                     // The frame that has just left the canister side of the gate.
@@ -644,7 +645,11 @@ private struct FilmStrip: View {
                     leader: metrics.leader,
                     edgePrint: "GRANULAR \(recipeName.uppercased())",
                     // The gate holds the next frame to expose; numbers fall toward the take-up.
-                    firstFrame: framesWound + 2
+                    firstFrame: framesWound + 2,
+                    // The film name marks the unexposed frame in the gate. The exposure
+                    // flash hands it on to the next frame, which then winds into the
+                    // gate carrying it, so the name never leaves with an old frame.
+                    namedFrame: framesWound + (gate == nil ? 1 : 2)
                 )
             }
             .frame(width: filmWidth, alignment: .leading)
@@ -670,6 +675,8 @@ private struct FilmRebate: View {
     let edgePrint: String?
     /// Frame number printed at the first slot, counting down slot by slot.
     let firstFrame: Int
+    /// The frame whose edge print carries the film name.
+    let namedFrame: Int
 
     var body: some View {
         Canvas { context, size in
@@ -697,7 +704,7 @@ private struct FilmRebate: View {
                     }
                     // Nothing is printed on the leader before frame 1.
                     guard number > 0 else { continue }
-                    let marker = number % 3 == 1 ? "\(edgePrint)   ▸ \(number)" : "▸ \(number)    ▸ \(number)A"
+                    let marker = number == namedFrame ? "\(edgePrint)   ▸ \(number)" : "▸ \(number)    ▸ \(number)A"
                     let text = Text(marker)
                         .font(.system(size: 7, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color(hex: 0xFFAA6E, opacity: 0.4))
