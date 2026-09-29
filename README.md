@@ -53,7 +53,3 @@ Copyright (c) 2026 Daniel McCullum.
 Granular is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is distributed in the hope that it will be useful, but without any warranty; see the license for details.
 
 Bundled third-party components keep their original licenses.
-
-## Further reading
-
-The product, interaction, imaging, validation, and delivery rationale lives in [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md).
