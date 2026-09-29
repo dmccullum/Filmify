@@ -86,7 +86,7 @@ def svg(defs, body):
 
 # Palettes: colour, and a high-contrast monochrome set for Clear and Tinted.
 COLOR = {
-    "yellow": ("#7A3400", "#FFC20A", "#FFDF7A"), "red": ("#5A0E02", "#EE4A1A", "#FF8C62"),
+    "yellow": ("#7A3400", "#F3B80C", "#F7CB2C"), "red": ("#5A0E02", "#EE4A1A", "#FF8C62"),
     "black": ("#000000", "#1D1D20", "#55575E"), "cap": ("#0E0E10", "#5A5C63"),
     "film": ("#E8893A", "#C9631F", "#A04A14", "#6E300B"), "lip": "#0c0a09", "lipline": "#2d2622",
 }
