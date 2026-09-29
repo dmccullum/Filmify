@@ -48,6 +48,11 @@ enum JobState: Equatable {
     }
 }
 
+private struct StockThumbnailKey: Equatable {
+    let sourceURL: URL?
+    let tone: FilmToneSettings
+}
+
 struct ProcessingJob: Identifiable {
     let id = UUID()
     let sourceURL: URL
@@ -105,6 +110,7 @@ final class AppModel {
 
     var sourcePreview: NSImage?
     var processedPreview: NSImage?
+    var stockThumbnails: [FilmStockID: NSImage] = [:]
     var selectedSourceURL: URL?
     var isRenderingPreview = false
     var isExporting = false
@@ -116,6 +122,10 @@ final class AppModel {
 
     private var processingService: ImageProcessingService?
     private var previewTask: Task<Void, Never>?
+    private var previewNeedsRender = false
+    private var stockThumbnailTask: Task<Void, Never>?
+    private var stockThumbnailKey: StockThumbnailKey?
+    private static let stockThumbnailPixelSize = 224
     private var resizeTask: Task<Void, Never>?
     private var monitor: WatchedFolderMonitor?
     private var activeSecurityURLs: [URL] = []
@@ -492,6 +502,7 @@ final class AppModel {
 
         retainSecurityScope(for: url)
         previewTask?.cancel()
+        previewTask = nil
         selectedSourceURL = url
         sourcePreview = image
         processedPreview = nil
@@ -646,29 +657,72 @@ final class AppModel {
         }
     }
 
+    /// Renders the preview live: one render at a time, and any changes made
+    /// while it runs are picked up as soon as it finishes, so dragging a
+    /// slider never queues up stale renders.
     func schedulePreview() {
-        guard operationMode == .edit,
-              let selectedSourceURL,
-              let processingService else { return }
-        previewTask?.cancel()
-        let recipe = recipe
+        guard operationMode == .edit, selectedSourceURL != nil, processingService != nil else {
+            return
+        }
         isRenderingPreview = true
-        previewTask = Task {
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else { return }
+        previewNeedsRender = true
+        guard previewTask == nil else { return }
+        previewTask = Task { await renderPendingPreviews() }
+    }
+
+    private func renderPendingPreviews() async {
+        while previewNeedsRender, !Task.isCancelled,
+              let sourceURL = selectedSourceURL, let processingService {
+            previewNeedsRender = false
             do {
-                let data = try await processingService.renderPreview(
-                    sourceURL: selectedSourceURL,
+                let image = try await processingService.renderPreview(
+                    sourceURL: sourceURL,
                     recipe: recipe,
                     maximumDimension: 2_400
                 )
                 guard !Task.isCancelled else { return }
-                processedPreview = NSImage(data: data)
-                isRenderingPreview = false
-                statusMessage = selectedSourceURL.lastPathComponent
+                processedPreview = NSImage(cgImage: image, size: .zero)
+                statusMessage = sourceURL.lastPathComponent
             } catch {
-                isRenderingPreview = false
+                guard !Task.isCancelled else { return }
                 statusMessage = "Preview failed: \(error.localizedDescription)"
+            }
+        }
+        guard !Task.isCancelled else { return }
+        isRenderingPreview = false
+        previewTask = nil
+    }
+
+    /// Renders a small Film Tone preview of every stock for the stock picker,
+    /// using the open image or a generated color swatch. Existing tiles
+    /// stay visible until their replacements arrive, one stock at a time.
+    func refreshStockThumbnails() {
+        guard let processingService else { return }
+        var tone = recipe.tone
+        tone.isEnabled = true
+        tone.stock = .none
+        let key = StockThumbnailKey(sourceURL: selectedSourceURL, tone: tone)
+        guard key != stockThumbnailKey else { return }
+
+        if stockThumbnailKey?.sourceURL != key.sourceURL {
+            stockThumbnails = [:]
+        }
+        let isRefresh = !stockThumbnails.isEmpty
+        stockThumbnailKey = key
+        stockThumbnailTask?.cancel()
+        stockThumbnailTask = Task {
+            if isRefresh {
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            for stock in FilmStockID.allCases {
+                guard !Task.isCancelled else { return }
+                guard let image = try? await processingService.renderStockThumbnail(
+                    sourceURL: key.sourceURL,
+                    tone: tone,
+                    stock: stock,
+                    maximumPixelSize: Self.stockThumbnailPixelSize
+                ), !Task.isCancelled else { continue }
+                stockThumbnails[stock] = NSImage(cgImage: image, size: .zero)
             }
         }
     }
