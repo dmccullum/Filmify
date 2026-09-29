@@ -36,21 +36,23 @@ public final class ImageExporter: @unchecked Sendable {
         ])
     }
 
-    public func previewData(for image: CIImage, maximumDimension: CGFloat = 1_600) throws -> Data {
+    /// Renders straight to a bitmap for display; encoding a preview to a file
+    /// format and decoding it again costs several times the render itself.
+    public func previewImage(for image: CIImage, maximumDimension: CGFloat = 1_600) throws -> CGImage {
         let scale = min(1, maximumDimension / max(image.extent.width, image.extent.height))
         let preview = scale < 1
             ? image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             : image
         let colorSpace = CGColorSpace(name: CGColorSpace.displayP3)!
-        guard let data = context.pngRepresentation(
-            of: preview,
+        guard let cgImage = context.createCGImage(
+            preview,
+            from: preview.extent.integral,
             format: .RGBA8,
-            colorSpace: colorSpace,
-            options: [:]
+            colorSpace: colorSpace
         ) else {
             throw ImageExporterError.imageCreationFailed
         }
-        return data
+        return cgImage
     }
 
     public func export(

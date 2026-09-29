@@ -16,12 +16,12 @@ public actor ImageProcessingService {
         sourceURL: URL,
         recipe: FilmRecipe,
         maximumDimension: CGFloat = 1_600
-    ) throws -> Data {
+    ) throws -> CGImage {
         let source = try renderer.loadImage(at: sourceURL)
         let rendered = try renderer.render(
             source, recipe: recipe, previewMaximumDimension: maximumDimension
         )
-        return try exporter.previewData(for: rendered, maximumDimension: maximumDimension)
+        return try exporter.previewImage(for: rendered, maximumDimension: maximumDimension)
     }
 
     /// Renders a small Film Tone preview of one stock for the stock picker. With
@@ -31,13 +31,13 @@ public actor ImageProcessingService {
         tone: FilmToneSettings,
         stock: FilmStockID,
         maximumPixelSize: Int = 192
-    ) throws -> Data {
+    ) throws -> CGImage {
         let source = try thumbnailSource(for: sourceURL, maximumPixelSize: maximumPixelSize)
         var settings = tone
         settings.isEnabled = true
         settings.stock = stock
         let rendered = try renderer.renderFilmTone(source, tone: settings)
-        return try exporter.previewData(for: rendered, maximumDimension: CGFloat(maximumPixelSize))
+        return try exporter.previewImage(for: rendered, maximumDimension: CGFloat(maximumPixelSize))
     }
 
     private func thumbnailSource(for url: URL?, maximumPixelSize: Int) throws -> CIImage {

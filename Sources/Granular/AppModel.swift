@@ -666,13 +666,13 @@ final class AppModel {
             try? await Task.sleep(for: .milliseconds(140))
             guard !Task.isCancelled else { return }
             do {
-                let data = try await processingService.renderPreview(
+                let image = try await processingService.renderPreview(
                     sourceURL: selectedSourceURL,
                     recipe: recipe,
                     maximumDimension: 2_400
                 )
                 guard !Task.isCancelled else { return }
-                processedPreview = NSImage(data: data)
+                processedPreview = NSImage(cgImage: image, size: .zero)
                 isRenderingPreview = false
                 statusMessage = selectedSourceURL.lastPathComponent
             } catch {
@@ -705,13 +705,13 @@ final class AppModel {
             }
             for stock in FilmStockID.allCases {
                 guard !Task.isCancelled else { return }
-                guard let data = try? await processingService.renderStockThumbnail(
+                guard let image = try? await processingService.renderStockThumbnail(
                     sourceURL: key.sourceURL,
                     tone: tone,
                     stock: stock,
                     maximumPixelSize: Self.stockThumbnailPixelSize
                 ), !Task.isCancelled else { continue }
-                stockThumbnails[stock] = NSImage(data: data)
+                stockThumbnails[stock] = NSImage(cgImage: image, size: .zero)
             }
         }
     }

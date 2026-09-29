@@ -236,11 +236,10 @@ import Testing
 @Test func stockThumbnailsRenderSmallPreviews() async throws {
     let service = try ImageProcessingService()
     for stock in [FilmStockID.none, .velvia100F, .triX400] {
-        let data = try await service.renderStockThumbnail(
+        let image = try await service.renderStockThumbnail(
             sourceURL: nil, tone: .init(), stock: stock, maximumPixelSize: 96
         )
-        let image = try #require(CIImage(data: data))
-        #expect(max(image.extent.width, image.extent.height) <= 96)
+        #expect(max(image.width, image.height) <= 96)
     }
 }
 

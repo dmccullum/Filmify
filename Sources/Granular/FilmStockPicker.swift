@@ -28,7 +28,7 @@ struct FilmStockPickerButton: View {
             .font(.caption)
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, minHeight: 22)
-            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 6))
             .contentShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
