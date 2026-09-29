@@ -29,6 +29,7 @@ public final class FilmRenderer: @unchecked Sendable {
     private let toneKernel: CIColorKernel
     private let stockInputKernel: CIColorKernel
     private let stockOutputKernel: CIColorKernel
+    private let characterKernel: CIColorKernel
     private let lightShapingKernel: CIColorKernel
     private let lensRadialBlurKernel: CIKernel
     private let lensChromaticKernel: CIKernel
@@ -49,6 +50,9 @@ public final class FilmRenderer: @unchecked Sendable {
         }
         guard let stockOutputKernel = CIColorKernel(source: Self.stockOutputSource) else {
             throw FilmRendererError.kernelCompilationFailed("color-stock output")
+        }
+        guard let characterKernel = CIColorKernel(source: Self.characterSource) else {
+            throw FilmRendererError.kernelCompilationFailed("film-character")
         }
         guard let lightShapingKernel = CIColorKernel(source: Self.lightShapingSource) else {
             throw FilmRendererError.kernelCompilationFailed("light-shaping")
@@ -80,6 +84,7 @@ public final class FilmRenderer: @unchecked Sendable {
         self.toneKernel = toneKernel
         self.stockInputKernel = stockInputKernel
         self.stockOutputKernel = stockOutputKernel
+        self.characterKernel = characterKernel
         self.lightShapingKernel = lightShapingKernel
         self.lensRadialBlurKernel = lensRadialBlurKernel
         self.lensChromaticKernel = lensChromaticKernel
@@ -180,19 +185,35 @@ public final class FilmRenderer: @unchecked Sendable {
         settings: FilmToneSettings,
         extent: CGRect
     ) throws -> CIImage {
-        let cube = try stockCube(for: settings.stock)
-        guard let input = stockInputKernel.apply(extent: extent, arguments: [image]) else {
+        let character = settings.stock.character
+        // Cubes carry their own shoulder, so ease highlights in before the
+        // lookup. A fitted character already describes its roll-off.
+        let knee: Float = character == nil ? 0.82 : 1
+        guard let input = stockInputKernel.apply(extent: extent, arguments: [image, knee]) else {
             throw FilmRendererError.renderFailed
         }
 
-        guard let filter = CIFilter(name: "CIColorCube") else {
-            throw FilmRendererError.renderFailed
-        }
-        filter.setValue(input, forKey: kCIInputImageKey)
-        filter.setValue(cube.dimension, forKey: "inputCubeDimension")
-        filter.setValue(cube.data, forKey: "inputCubeData")
-        guard let graded = filter.outputImage?.cropped(to: extent) else {
-            throw FilmRendererError.renderFailed
+        let graded: CIImage
+        if let character {
+            guard let output = characterKernel.apply(
+                extent: extent,
+                arguments: [input] + Self.characterArguments(character)
+            ) else {
+                throw FilmRendererError.renderFailed
+            }
+            graded = output
+        } else {
+            let cube = try stockCube(for: settings.stock)
+            guard let filter = CIFilter(name: "CIColorCube") else {
+                throw FilmRendererError.renderFailed
+            }
+            filter.setValue(input, forKey: kCIInputImageKey)
+            filter.setValue(cube.dimension, forKey: "inputCubeDimension")
+            filter.setValue(cube.data, forKey: "inputCubeData")
+            guard let output = filter.outputImage?.cropped(to: extent) else {
+                throw FilmRendererError.renderFailed
+            }
+            graded = output
         }
 
         let amount = Float(max(0, min(FilmToneSettings.maximumStockAmount, settings.stockAmount)))
@@ -202,7 +223,7 @@ public final class FilmRenderer: @unchecked Sendable {
             arguments: [
                 image,
                 graded,
-                Float(settings.stock.toneRetention),
+                Float(character == nil ? settings.stock.toneRetention : 1),
                 colorAmount,
                 amount
             ]
@@ -210,6 +231,28 @@ public final class FilmRenderer: @unchecked Sendable {
             throw FilmRendererError.renderFailed
         }
         return output
+    }
+
+    static func characterArguments(_ character: FilmCharacter) -> [Any] {
+        let curves = (0 ..< FilmCharacter.curveKnots.count).map { index in
+            CIVector(
+                x: FilmCharacter.curveKnots[index] + character.red[index],
+                y: FilmCharacter.curveKnots[index] + character.green[index],
+                z: FilmCharacter.curveKnots[index] + character.blue[index]
+            )
+        }
+        let sectors = (0 ..< FilmCharacter.hueCenters.count).map { index in
+            CIVector(
+                x: character.lightness[index],
+                y: character.chroma[index],
+                z: character.hue[index]
+            )
+        }
+        let saturation = CIVector(
+            x: character.highlightDesaturation,
+            y: character.shadowSaturation
+        )
+        return curves + sectors + [saturation]
     }
 
     private func stockCube(for stock: FilmStockID) throws -> FilmStockCube {
@@ -519,7 +562,7 @@ private extension FilmRenderer {
             : 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
     }
 
-    kernel vec4 prepareFilmStock(__sample pixel) {
+    kernel vec4 prepareFilmStock(__sample pixel, float knee) {
         vec3 rec2020 = max(pixel.rgb, vec3(0.0));
         vec3 rgb = vec3(
             1.6604910 * rec2020.r - 0.5876411 * rec2020.g - 0.0728499 * rec2020.b,
@@ -531,8 +574,9 @@ private extension FilmRenderer {
         // excursions toward neutral before lookup instead of clipping individual
         // channels, which would create hard, synthetic hue changes.
         float y = max(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0);
-        if (y > 0.82) {
-            float rolledY = 0.82 + 0.18 * (1.0 - exp(-(y - 0.82) / 0.18));
+        if (y > knee) {
+            float width = max(1.0 - knee, 0.02);
+            float rolledY = knee + width * (1.0 - exp(-(y - knee) / width));
             rgb *= rolledY / max(y, 0.000001);
             y = rolledY;
         }
@@ -548,6 +592,95 @@ private extension FilmRenderer {
             srgbEncode(rgb.r),
             srgbEncode(rgb.g),
             srgbEncode(rgb.b),
+            pixel.a
+        );
+    }
+    """#
+
+    static let characterSource = #"""
+    float srgbToLinear(float value) {
+        return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4);
+    }
+
+    float linearToSrgb(float value) {
+        float linear = max(value, 0.0);
+        return linear <= 0.0031308 ? linear * 12.92 : 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+    }
+
+    float sectorWeight(float hue, float center) {
+        float difference = mod(hue - center + 3.14159265, 6.28318531) - 3.14159265;
+        return max(1.0 - abs(difference) / 1.04719755, 0.0);
+    }
+
+    float curve(float value, float k0, float k1, float k2, float k3, float k4, float k5) {
+        float x = clamp(value, 0.0, 1.0);
+        if (x < 0.125) { return mix(k0, k1, x / 0.125); }
+        if (x < 0.25) { return mix(k1, k2, (x - 0.125) / 0.125); }
+        if (x < 0.5) { return mix(k2, k3, (x - 0.25) / 0.25); }
+        if (x < 0.75) { return mix(k3, k4, (x - 0.5) / 0.25); }
+        return mix(k4, k5, (x - 0.75) / 0.25);
+    }
+
+    kernel vec4 filmCharacter(
+        __sample pixel,
+        vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec3 c5,
+        vec3 red, vec3 yellow, vec3 green, vec3 cyan, vec3 blue, vec3 magenta,
+        vec2 saturation
+    ) {
+        vec3 rgb = clamp(pixel.rgb, 0.0, 1.0);
+        vec3 linear = vec3(srgbToLinear(rgb.r), srgbToLinear(rgb.g), srgbToLinear(rgb.b));
+        vec3 lms = vec3(
+            0.4122214708 * linear.r + 0.5363325363 * linear.g + 0.0514459929 * linear.b,
+            0.2119034982 * linear.r + 0.6806995451 * linear.g + 0.1073969566 * linear.b,
+            0.0883024619 * linear.r + 0.2817188376 * linear.g + 0.6299787005 * linear.b
+        );
+        lms = pow(max(lms, vec3(0.0)), vec3(0.33333333));
+        float lightness = 0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z;
+        float a = 1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z;
+        float b = 0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z;
+
+        float chroma = length(vec2(a, b));
+        float hue = atan(b, a);
+        // Hue edits fade out toward neutral so grays keep only the curves' tint.
+        float colorWeight = clamp(chroma / 0.08, 0.0, 1.0);
+        float w0 = sectorWeight(hue, 0.52359878);
+        float w1 = sectorWeight(hue, 1.57079633);
+        float w2 = sectorWeight(hue, 2.61799388);
+        float w3 = sectorWeight(hue, 3.66519143);
+        float w4 = sectorWeight(hue, 4.71238898);
+        float w5 = sectorWeight(hue, 5.75958653);
+        vec3 edit = (w0 * red + w1 * yellow + w2 * green + w3 * cyan + w4 * blue + w5 * magenta)
+            * colorWeight;
+
+        lightness += edit.x;
+        chroma *= exp(edit.y);
+        chroma *= (1.0 - saturation.x * clamp((lightness - 0.6) / 0.4, 0.0, 1.0))
+            * (1.0 + saturation.y * clamp((0.6 - lightness) / 0.6, 0.0, 1.0));
+        hue += edit.z;
+        a = chroma * cos(hue);
+        b = chroma * sin(hue);
+
+        vec3 root = vec3(
+            lightness + 0.3963377774 * a + 0.2158037573 * b,
+            lightness - 0.1055613458 * a - 0.0638541728 * b,
+            lightness - 0.0894841775 * a - 1.2914855480 * b
+        );
+        lms = root * root * root;
+        linear = vec3(
+            4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
+            -1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
+            -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z
+        );
+        rgb = clamp(
+            vec3(linearToSrgb(linear.r), linearToSrgb(linear.g), linearToSrgb(linear.b)),
+            0.0,
+            1.0
+        );
+
+        return vec4(
+            curve(rgb.r, c0.x, c1.x, c2.x, c3.x, c4.x, c5.x),
+            curve(rgb.g, c0.y, c1.y, c2.y, c3.y, c4.y, c5.y),
+            curve(rgb.b, c0.z, c1.z, c2.z, c3.z, c4.z, c5.z),
             pixel.a
         );
     }

@@ -3,3 +3,4 @@ dist/
 .DS_Store
 .pnpm-store/
 /Icon/
+__pycache__/

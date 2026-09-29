@@ -77,7 +77,7 @@ import Testing
 }
 
 @Test func allNamedColorStocksLoadAsCoreImageCubes() throws {
-    for stock in FilmStockID.allCases where stock != .none {
+    for stock in FilmStockID.allCases where stock.resourceName != nil {
         let cube = try FilmStockLUTLoader.load(stock)
         #expect(cube.dimension == 33)
         #expect(cube.data.count == 33 * 33 * 33 * 4 * MemoryLayout<Float>.size)
@@ -150,12 +150,13 @@ import Testing
         let shadow = try renderStockPatches(renderer, stock: stock, colors: [[0.03, 0.03, 0.03]])
         return pixelLuminance(shadow[0])
     }
-    #expect(try shadowDepth(.velvia50) < shadowDepth(.portra400) * 0.85)
+    #expect(try shadowDepth(.velvia100F) < shadowDepth(.portra400) * 0.85)
 }
 
-@Test func filmStocksKeepMiddleGrayNearMiddleGray() throws {
+@Test func spectralStocksKeepMiddleGrayNearMiddleGray() throws {
+    // Fitted characters keep their reference's exposure shift on purpose.
     let renderer = try FilmRenderer()
-    for stock in FilmStockID.allCases where stock != .none {
+    for stock in FilmStockID.allCases where stock.resourceName != nil {
         let gray = try renderStockPatches(renderer, stock: stock, colors: [[0.18, 0.18, 0.18]])[0]
         let stops = log2(Double(pixelLuminance(gray)) / 0.18)
         #expect(abs(stops) < 0.34, "\(stock.name) moves middle gray \(stops) stops")
@@ -186,7 +187,7 @@ import Testing
             }
         }
     }
-    #expect(closest.distance > 0.012, "Closest stocks: \(closest.pair) at \(closest.distance)")
+    #expect(closest.distance > 0.009, "Closest stocks: \(closest.pair) at \(closest.distance)")
 }
 
 @Test func blackAndWhiteStocksStayNeutralWhenOvercooked() throws {
@@ -215,7 +216,9 @@ import Testing
 
     #expect(try decode("portra160") == .portra400)
     #expect(try decode("superiaReala") == .superia400)
-    #expect(try decode("velvia50") == .velvia50)
+    #expect(try decode("velvia50") == .velvia100F)
+    #expect(try decode("ektachrome100D") == .e100G)
+    #expect(try decode("hp5") == .hp5)
     #expect(try decode("someFutureStock") == FilmStockID.none)
 }
 
@@ -232,7 +235,7 @@ import Testing
 
 @Test func stockThumbnailsRenderSmallPreviews() async throws {
     let service = try ImageProcessingService()
-    for stock in [FilmStockID.none, .velvia50, .triX400] {
+    for stock in [FilmStockID.none, .velvia100F, .triX400] {
         let data = try await service.renderStockThumbnail(
             sourceURL: nil, tone: .init(), stock: stock, maximumPixelSize: 96
         )

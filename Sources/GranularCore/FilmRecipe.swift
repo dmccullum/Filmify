@@ -34,18 +34,25 @@ public enum FilmStockID: String, CaseIterable, Codable, Hashable, Sendable {
     case vision250D
     case vision500T
     case eterna500
-    case velvia50
+    case optima100
+    case velvia100F
     case provia100F
-    case ektachrome100D
+    case eliteChrome
+    case e100G
+    case e200
     case kodachrome64
     case instax
+    case fp100C
     case triX400
+    case hp5
     case doubleX
 
     /// Stocks from earlier versions that were folded into a close neighbor.
     static let retiredAliases: [String: FilmStockID] = [
         "portra160": .portra400,
-        "superiaReala": .superia400
+        "superiaReala": .superia400,
+        "velvia50": .velvia100F,
+        "ektachrome100D": .e100G
     ]
 
     public init(from decoder: Decoder) throws {
@@ -67,12 +74,17 @@ public enum FilmStockID: String, CaseIterable, Codable, Hashable, Sendable {
         case .vision250D: "Vision3 250D"
         case .vision500T: "Vision3 500T"
         case .eterna500: "Eterna 500"
-        case .velvia50: "Velvia 50"
+        case .optima100: "Optima 100"
+        case .velvia100F: "Velvia 100F"
         case .provia100F: "Provia 100F"
-        case .ektachrome100D: "Ektachrome 100D"
+        case .eliteChrome: "Elite Chrome"
+        case .e100G: "E100G"
+        case .e200: "E200"
         case .kodachrome64: "Kodachrome 64"
         case .instax: "Instax"
+        case .fp100C: "FP-100C"
         case .triX400: "Tri-X 400"
+        case .hp5: "HP5 Plus"
         case .doubleX: "Double-X"
         }
     }
@@ -91,12 +103,17 @@ public enum FilmStockID: String, CaseIterable, Codable, Hashable, Sendable {
         case .vision250D: "Clean, natural daylight cinema"
         case .vision500T: "Cool tungsten night"
         case .eterna500: "Quiet, desaturated cinema"
-        case .velvia50: "Dense, electric landscape color"
+        case .optima100: "Crisp European color with cool, quiet greens"
+        case .velvia100F: "Dense, electric landscape color"
         case .provia100F: "Clean, neutral slide"
-        case .ektachrome100D: "Crisp, cool blues"
+        case .eliteChrome: "Punchy slide with deep, inky shadows"
+        case .e100G: "Fine, true-to-life slide with clear blues"
+        case .e200: "Soft slide with gentle, muted greens"
         case .kodachrome64: "Rich reds, deep shadows"
         case .instax: "Bright, soft and faded"
+        case .fp100C: "Pale peel-apart instant with lifted blacks"
         case .triX400: "Gritty, contrasty black and white"
+        case .hp5: "Open, gentle black and white"
         case .doubleX: "Smooth cinema black and white"
         }
     }
@@ -104,12 +121,12 @@ public enum FilmStockID: String, CaseIterable, Codable, Hashable, Sendable {
     public var family: FilmStockFamily? {
         switch self {
         case .none: nil
-        case .portra400, .ektar100, .gold200, .ultramax400, .pro400H, .superia400, .c200:
+        case .portra400, .ektar100, .gold200, .ultramax400, .pro400H, .superia400, .c200, .optima100:
             .colorNegative
         case .vision250D, .vision500T, .eterna500: .cinema
-        case .velvia50, .provia100F, .ektachrome100D, .kodachrome64: .slide
-        case .instax: .instant
-        case .triX400, .doubleX: .blackAndWhite
+        case .velvia100F, .provia100F, .eliteChrome, .e100G, .e200, .kodachrome64: .slide
+        case .instax, .fp100C: .instant
+        case .triX400, .hp5, .doubleX: .blackAndWhite
         }
     }
 
@@ -122,39 +139,27 @@ public enum FilmStockID: String, CaseIterable, Codable, Hashable, Sendable {
     /// keep little of theirs while slide and black-and-white film keep more.
     var toneRetention: Double {
         switch self {
-        case .none: 0
-        case .portra400, .pro400H, .c200: 0.20
-        case .gold200, .superia400, .vision250D, .eterna500: 0.25
+        case .c200: 0.20
+        case .vision250D, .eterna500: 0.25
         case .ultramax400, .vision500T: 0.30
-        case .ektar100: 0.35
-        case .instax: 0.40
-        case .provia100F, .ektachrome100D: 0.45
         case .doubleX: 0.35
-        case .kodachrome64: 0.50
-        case .velvia50, .triX400: 0.55
+        case .provia100F: 0.45
+        // Fitted characters carry their own tone curve in full.
+        default: 1
         }
     }
 
+    /// The spectral cube for stocks without a fitted character.
     var resourceName: String? {
         switch self {
-        case .none: nil
-        case .portra400: "portra_400"
-        case .ektar100: "ektar_100"
-        case .gold200: "gold_200"
         case .ultramax400: "ultramax_400"
-        case .pro400H: "pro_400h"
-        case .superia400: "superia_400"
         case .c200: "c200"
         case .vision250D: "vision3_250d"
         case .vision500T: "vision3_500t"
         case .eterna500: "eterna_500"
-        case .velvia50: "velvia_50"
         case .provia100F: "provia_100f"
-        case .ektachrome100D: "ektachrome_100d"
-        case .kodachrome64: "kodachrome_64"
-        case .instax: "instax"
-        case .triX400: "trix_400"
         case .doubleX: "double_x"
+        default: nil
         }
     }
 

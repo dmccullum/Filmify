@@ -1,8 +1,8 @@
 import GranularCore
 import SwiftUI
 
-/// The Film Stock control: a compact button that opens a grid of every stock
-/// rendered on the current photograph.
+/// The Film Stock control: a full-width field that opens a grid of every
+/// stock rendered on the current photograph.
 struct FilmStockPickerButton: View {
     @Environment(AppModel.self) private var model
     @Binding var stock: FilmStockID
@@ -12,16 +12,29 @@ struct FilmStockPickerButton: View {
         Button {
             isPresented.toggle()
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Text(stock.name)
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
+                if let family = stock.family {
+                    Text(family.title)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 22)
+            .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(RoundedRectangle(cornerRadius: 6))
         }
-        .controlSize(.small)
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .help(stock.vibe)
+        .accessibilityLabel("Film Stock, \(stock.name)")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             FilmStockGrid(stock: $stock, dismiss: { isPresented = false })
                 .environment(model)
@@ -146,6 +159,7 @@ private struct FilmStockTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .help(stock.vibe)
         .accessibilityLabel(stock.name)
         .accessibilityHint(stock.vibe)

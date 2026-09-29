@@ -49,7 +49,9 @@ private struct FilmToneCard: View {
             reset: reset,
             showsAdvanced: false
         ) {
-            LabeledContent("Film Stock") {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Film Stock")
+                    .font(.caption)
                 FilmStockPickerButton(stock: Binding {
                     settings.stock
                 } set: { stock in
@@ -60,6 +62,7 @@ private struct FilmToneCard: View {
                     }
                 })
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             ParameterSlider(
                 "Stock Amount",
                 value: $settings.stockAmount,
