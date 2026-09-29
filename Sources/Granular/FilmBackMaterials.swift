@@ -217,3 +217,29 @@ struct VerticalLabel: Layout {
         )
     }
 }
+
+/// The maker's nameplate on the camera's top plate: spaced mid-century
+/// capitals, painted white on black chrome and black on stainless.
+struct CameraNameplate: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let isDark = colorScheme == .dark
+        Text("GRANULAR")
+            .font(.custom("Futura-Medium", size: 16))
+            .tracking(5)
+            .foregroundStyle(
+                LinearGradient(
+                    colors: isDark
+                        ? [Color(hex: 0xFFFFFF), Color(hex: 0xD6D9DC)]
+                        : [Color(hex: 0x1A1B1C), Color(hex: 0x3A3C3E)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .shadow(color: isDark ? .black.opacity(0.8) : .white.opacity(0.9), radius: 0, y: isDark ? -1 : 1)
+            .fixedSize()
+            .accessibilityLabel("Granular")
+            .accessibilityAddTraits(.isHeader)
+    }
+}

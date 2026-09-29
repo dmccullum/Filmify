@@ -72,7 +72,9 @@ struct FilmCanisterView: View {
             case .bulk(let label): bulkTin(label)
             }
         }
-        .compositingGroup()
+        // Flatten the stacked caps and body into one layer so no seams show
+        // when the canister moves by fractional amounts.
+        .drawingGroup()
         .shadow(color: .black.opacity(0.6), radius: 12 * s, y: 12 * s)
     }
 

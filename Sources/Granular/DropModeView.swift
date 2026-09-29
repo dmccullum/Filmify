@@ -10,7 +10,7 @@ struct DropModeView: View {
     /// The job currently sitting in the gate. It stays there for a beat after
     /// finishing so the exposure reads before the film advances.
     @State private var exposure: Exposure?
-    @State private var thumbnails: [UUID: FilmThumbnail] = [:]
+    private var roll: FilmRoll { .shared }
 
     private struct Exposure: Equatable {
         let jobID: UUID
@@ -27,7 +27,7 @@ struct DropModeView: View {
             FilmChamber(
                 style: CanisterStyle(recipe: model.currentRecipe, isModified: model.isRecipeModified),
                 recipeName: model.recipeDisplayName,
-                gate: exposure.map { GateExposure(id: $0.jobID, image: thumbnails[$0.jobID]?.image) },
+                gate: exposure.map { GateExposure(id: $0.jobID, image: roll.thumbnails[$0.jobID]?.image) },
                 frames: exposedFrames,
                 isTargeted: model.isDropTargeted,
                 namespace: film,
@@ -58,7 +58,7 @@ struct DropModeView: View {
     private var exposedFrames: [ExposedFrame] {
         model.jobs.compactMap { job -> ExposedFrame? in
             guard case .finished = job.state, job.id != exposure?.jobID else { return nil }
-            return ExposedFrame(id: job.id, image: thumbnails[job.id]?.image)
+            return ExposedFrame(id: job.id, image: roll.thumbnails[job.id]?.image)
         }
         .prefix(4)
         .map { $0 }
@@ -103,14 +103,23 @@ struct DropModeView: View {
     private func loadThumbnail(from url: URL, for jobID: UUID) {
         Task {
             guard let thumbnail = await FilmThumbnail.load(url) else { return }
-            thumbnails[jobID] = thumbnail
             let visible = Set(model.jobs.prefix(6).map(\.id))
-            thumbnails = thumbnails.filter { visible.contains($0.key) }
+            roll.thumbnails[jobID] = thumbnail
+            roll.thumbnails = roll.thumbnails.filter { visible.contains($0.key) }
         }
     }
 }
 
 // MARK: - Thumbnails
+
+/// Thumbnails of the frames on the strip. Lives outside the view so the
+/// negatives survive a trip to Edit mode and back.
+@MainActor
+@Observable
+final class FilmRoll {
+    static let shared = FilmRoll()
+    var thumbnails: [UUID: FilmThumbnail] = [:]
+}
 
 struct FilmThumbnail: @unchecked Sendable {
     let image: CGImage
@@ -163,13 +172,16 @@ private struct FilmChamber: View {
             let width = geometry.size.width
             let height = geometry.size.height
             let format = style.format
-            let canisterHeight = height - 26
+            // Size everything from the Instant window's chamber, not the live
+            // height, so nothing balloons while the window resizes between modes.
+            let layoutHeight = min(height, 310)
+            let canisterHeight = layoutHeight - 26
             let scale = canisterHeight / 320
             let canisterWidth = CanisterStyle.designBodyWidth * scale
             let canisterLeading: CGFloat = 20
             let bodyTrailing = canisterLeading + canisterWidth
             let stripLeading = bodyTrailing - 10 * scale
-            let stripHeight = (height * format.stripFraction).rounded()
+            let stripHeight = (layoutHeight * format.stripFraction).rounded()
             let stripWidth = width - stripLeading
 
             ZStack(alignment: .topLeading) {
@@ -182,8 +194,8 @@ private struct FilmChamber: View {
                             .blur(radius: 6)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     )
-                    .frame(width: bodyTrailing + 4, height: height - 12)
-                    .offset(x: 8, y: 6)
+                    .frame(width: bodyTrailing + 4, height: layoutHeight - 12)
+                    .offset(x: 8, y: (height - layoutHeight) / 2 + 6)
 
                 rail(y: (height - stripHeight) / 2 - 9, from: stripLeading + 30, to: width - 70)
                 rail(y: (height + stripHeight) / 2 + 5, from: stripLeading + 30, to: width - 70)
@@ -304,8 +316,8 @@ private struct HoverLift<Content: View>: View {
 
     var body: some View {
         content
-            .offset(y: isHovering ? -3 : 0)
-            .scaleEffect(isPressed ? 0.985 : 1)
+            .offset(y: isHovering && !isPressed ? -3 : 0)
+            .brightness(isPressed ? -0.05 : 0)
             .animation(.easeOut(duration: 0.18), value: isHovering)
             .onHover { isHovering = $0 }
     }
@@ -382,7 +394,7 @@ private struct FilmStrip: View {
         let frameHeight = height - bandTop - bandBottom
         let frameWidth = (frameHeight * format.frameAspect).rounded()
         let gap = max(8, (frameWidth * 0.06).rounded())
-        let leader: CGFloat = 16
+        let leader: CGFloat = 38
         let pitch = frameWidth + gap
         let blankCount = max(0, Int(ceil((width - leader) / pitch)) - 1 - frames.count)
 
@@ -412,7 +424,6 @@ private struct FilmStrip: View {
                 HStack(spacing: gap) {
                     FilmGate(
                         exposure: gate,
-                        recipeName: recipeName,
                         isTargeted: isTargeted,
                         namespace: namespace,
                         isPrimary: isPrimary,
@@ -521,9 +532,13 @@ private struct NegativeImage: View {
     let image: CGImage
 
     var body: some View {
-        Image(decorative: image, scale: 1)
-            .resizable()
-            .scaledToFill()
+        Color.clear
+            .overlay {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .scaledToFill()
+            }
+            .clipped()
             .grayscale(1)
             .colorInvert()
             .colorMultiply(Color(hex: 0xC98450))
@@ -537,7 +552,6 @@ private struct NegativeImage: View {
 
 private struct FilmGate: View {
     let exposure: GateExposure?
-    let recipeName: String
     let isTargeted: Bool
     let namespace: Namespace.ID
     let isPrimary: Bool
@@ -571,15 +585,9 @@ private struct FilmGate: View {
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(isTargeted ? FilmBackPalette.counter : Color(hex: 0xFFECDC, opacity: 0.85))
                 .contentTransition(.symbolEffect(.replace))
-            VStack(spacing: 2) {
-                Text(isTargeted ? "Release to process" : "Drop images to process")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                (Text("Processed with ") + Text(recipeName).fontWeight(.semibold).foregroundStyle(.white))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Color(hex: 0xFFECDC, opacity: 0.75))
-            }
-            .multilineTextAlignment(.center)
+            Text(isTargeted ? "Release to process" : "Drop images to process")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
             Button("Choose Images…", action: onChoose)
                 .buttonStyle(SteelButtonStyle())
         }
@@ -600,9 +608,13 @@ private struct ExposureBurn: View {
             Color(hex: 0x2B1C13)
             if let image {
                 NegativeImage(image: image)
-                Image(decorative: image, scale: 1)
-                    .resizable()
-                    .scaledToFill()
+                Color.clear
+                    .overlay {
+                        Image(decorative: image, scale: 1)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                    .clipped()
                     .brightness(0.3 * positive)
                     .scaleEffect(x: -1, y: 1)
                     .opacity(positive)

@@ -32,7 +32,14 @@ struct ContentView: View {
             }
         }
         .toolbarBackgroundVisibility(model.operationMode == .drop ? .hidden : .automatic, for: .windowToolbar)
+        .toolbar(removing: model.operationMode == .drop ? .title : nil)
         .toolbar {
+            if model.operationMode == .drop {
+                ToolbarItem(placement: .principal) {
+                    CameraNameplate()
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
             ToolbarItem(placement: .primaryAction) {
                 ModePicker()
             }
