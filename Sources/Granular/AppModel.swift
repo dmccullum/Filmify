@@ -48,6 +48,11 @@ enum JobState: Equatable {
     }
 }
 
+private struct StockThumbnailKey: Equatable {
+    let sourceURL: URL?
+    let tone: FilmToneSettings
+}
+
 struct ProcessingJob: Identifiable {
     let id = UUID()
     let sourceURL: URL
@@ -105,6 +110,7 @@ final class AppModel {
 
     var sourcePreview: NSImage?
     var processedPreview: NSImage?
+    var stockThumbnails: [FilmStockID: NSImage] = [:]
     var selectedSourceURL: URL?
     var isRenderingPreview = false
     var isExporting = false
@@ -116,6 +122,9 @@ final class AppModel {
 
     private var processingService: ImageProcessingService?
     private var previewTask: Task<Void, Never>?
+    private var stockThumbnailTask: Task<Void, Never>?
+    private var stockThumbnailKey: StockThumbnailKey?
+    private static let stockThumbnailPixelSize = 224
     private var resizeTask: Task<Void, Never>?
     private var monitor: WatchedFolderMonitor?
     private var activeSecurityURLs: [URL] = []
@@ -669,6 +678,40 @@ final class AppModel {
             } catch {
                 isRenderingPreview = false
                 statusMessage = "Preview failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Renders a small Film Tone preview of every stock for the stock picker,
+    /// using the open image or a generated color swatch. Existing tiles
+    /// stay visible until their replacements arrive, one stock at a time.
+    func refreshStockThumbnails() {
+        guard let processingService else { return }
+        var tone = recipe.tone
+        tone.isEnabled = true
+        tone.stock = .none
+        let key = StockThumbnailKey(sourceURL: selectedSourceURL, tone: tone)
+        guard key != stockThumbnailKey else { return }
+
+        if stockThumbnailKey?.sourceURL != key.sourceURL {
+            stockThumbnails = [:]
+        }
+        let isRefresh = !stockThumbnails.isEmpty
+        stockThumbnailKey = key
+        stockThumbnailTask?.cancel()
+        stockThumbnailTask = Task {
+            if isRefresh {
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            for stock in FilmStockID.allCases {
+                guard !Task.isCancelled else { return }
+                guard let data = try? await processingService.renderStockThumbnail(
+                    sourceURL: key.sourceURL,
+                    tone: tone,
+                    stock: stock,
+                    maximumPixelSize: Self.stockThumbnailPixelSize
+                ), !Task.isCancelled else { continue }
+                stockThumbnails[stock] = NSImage(data: data)
             }
         }
     }

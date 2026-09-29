@@ -1,4 +1,6 @@
 import CoreGraphics
+import CoreImage
+import ImageIO
 import Foundation
 
 public actor ImageProcessingService {
@@ -20,6 +22,82 @@ public actor ImageProcessingService {
             source, recipe: recipe, previewMaximumDimension: maximumDimension
         )
         return try exporter.previewData(for: rendered, maximumDimension: maximumDimension)
+    }
+
+    /// Renders a small Film Tone preview of one stock for the stock picker. With
+    /// no source image, a generated color swatch stands in.
+    public func renderStockThumbnail(
+        sourceURL: URL?,
+        tone: FilmToneSettings,
+        stock: FilmStockID,
+        maximumPixelSize: Int = 192
+    ) throws -> Data {
+        let source = try thumbnailSource(for: sourceURL, maximumPixelSize: maximumPixelSize)
+        var settings = tone
+        settings.isEnabled = true
+        settings.stock = stock
+        let rendered = try renderer.renderFilmTone(source, tone: settings)
+        return try exporter.previewData(for: rendered, maximumDimension: CGFloat(maximumPixelSize))
+    }
+
+    private func thumbnailSource(for url: URL?, maximumPixelSize: Int) throws -> CIImage {
+        if let cached = thumbnailSourceCache,
+           cached.url == url,
+           cached.maximumPixelSize == maximumPixelSize {
+            return cached.image
+        }
+        let image: CIImage
+        if let url {
+            guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, [
+                      kCGImageSourceCreateThumbnailFromImageAlways: true,
+                      kCGImageSourceCreateThumbnailWithTransform: true,
+                      kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize
+                  ] as CFDictionary) else {
+                throw FilmRendererError.imageLoadFailed(url)
+            }
+            image = CIImage(cgImage: thumbnail)
+        } else {
+            image = Self.colorSwatch(width: maximumPixelSize, height: maximumPixelSize * 2 / 3)
+        }
+        thumbnailSourceCache = (url, maximumPixelSize, image)
+        return image
+    }
+
+    private var thumbnailSourceCache: (url: URL?, maximumPixelSize: Int, image: CIImage)?
+
+    /// Skin, foliage, sky and saturated primaries over a gray ramp: enough to
+    /// show a stock's color and tone character without a photograph.
+    private static func colorSwatch(width: Int, height: Int) -> CIImage {
+        let colors: [(CGFloat, CGFloat, CGFloat)] = [
+            (0.84, 0.62, 0.50), (0.45, 0.30, 0.22), (0.35, 0.47, 0.22), (0.38, 0.55, 0.78),
+            (0.80, 0.18, 0.16), (0.90, 0.72, 0.20), (0.20, 0.55, 0.55), (0.45, 0.28, 0.55)
+        ]
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+        let columns = colors.count / 2
+        let patchWidth = CGFloat(width) / CGFloat(columns)
+        let rampHeight = CGFloat(height) / 3
+        let patchHeight = (CGFloat(height) - rampHeight) / 2
+        var swatch = CIImage.empty()
+        for (index, color) in colors.enumerated() {
+            let column = CGFloat(index % columns)
+            let row = CGFloat(index / columns)
+            let patch = CIImage(color: CIColor(red: color.0, green: color.1, blue: color.2, colorSpace: sRGB)!)
+                .cropped(to: CGRect(
+                    x: column * patchWidth,
+                    y: rampHeight + (1 - row) * patchHeight,
+                    width: patchWidth,
+                    height: patchHeight
+                ))
+            swatch = patch.composited(over: swatch)
+        }
+        let ramp = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": CIVector(x: 0, y: 0),
+            "inputPoint1": CIVector(x: CGFloat(width), y: 0),
+            "inputColor0": CIColor(red: 0.02, green: 0.02, blue: 0.02, colorSpace: sRGB)!,
+            "inputColor1": CIColor(red: 0.96, green: 0.96, blue: 0.96, colorSpace: sRGB)!
+        ])!.outputImage!.cropped(to: CGRect(x: 0, y: 0, width: CGFloat(width), height: rampHeight))
+        return ramp.composited(over: swatch)
     }
 
     public func process(

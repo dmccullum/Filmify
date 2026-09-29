@@ -49,16 +49,16 @@ private struct FilmToneCard: View {
             reset: reset,
             showsAdvanced: false
         ) {
-            LabeledContent("Color Stock") {
-                Picker("Color Stock", selection: $settings.stock) {
-                    ForEach(FilmStockID.allCases, id: \.self) { stock in
-                        Text(stock.name).tag(stock)
+            LabeledContent("Film Stock") {
+                FilmStockPickerButton(stock: Binding {
+                    settings.stock
+                } set: { stock in
+                    settings.stock = stock
+                    // Choosing a stock is a request to see it.
+                    if stock != .none {
+                        settings.isEnabled = true
                     }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .controlSize(.small)
-                .frame(maxWidth: 178)
+                })
             }
             ParameterSlider(
                 "Stock Amount",

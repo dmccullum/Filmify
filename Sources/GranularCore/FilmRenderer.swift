@@ -108,16 +108,8 @@ public final class FilmRenderer: @unchecked Sendable {
         var extent = source.extent.integral
         guard !extent.isEmpty else { throw FilmRendererError.renderFailed }
 
-        var image = source
+        var image = try renderFilmTone(source, tone: recipe.tone)
 
-        if recipe.tone.isEnabled, recipe.tone.hasToneAdjustments {
-            image = try applyTone(image, settings: recipe.tone, extent: extent)
-        }
-        if recipe.tone.isEnabled,
-           recipe.tone.stock != .none,
-           recipe.tone.stockAmount > 0 {
-            image = try applyFilmStock(image, settings: recipe.tone, extent: extent)
-        }
         if recipe.lightShaping.isEnabled, recipe.lightShaping.amountStops != 0 {
             image = try applyLightShaping(image, settings: recipe.lightShaping, extent: extent)
         }
@@ -147,6 +139,21 @@ public final class FilmRenderer: @unchecked Sendable {
         }
 
         return image.cropped(to: extent)
+    }
+
+    /// Applies only the Film Tone stage: tone adjustments, then the color stock.
+    public func renderFilmTone(_ source: CIImage, tone: FilmToneSettings) throws -> CIImage {
+        let extent = source.extent.integral
+        guard tone.isEnabled, !extent.isEmpty else { return source }
+
+        var image = source
+        if tone.hasToneAdjustments {
+            image = try applyTone(image, settings: tone, extent: extent)
+        }
+        if tone.stock != .none, tone.stockAmount > 0 {
+            image = try applyFilmStock(image, settings: tone, extent: extent)
+        }
+        return image
     }
 
     private func applyTone(
@@ -189,9 +196,16 @@ public final class FilmRenderer: @unchecked Sendable {
         }
 
         let amount = Float(max(0, min(FilmToneSettings.maximumStockAmount, settings.stockAmount)))
+        let colorAmount = settings.stock.isMonochrome ? min(amount, 1) : amount
         guard let output = stockOutputKernel.apply(
             extent: extent,
-            arguments: [image, graded, amount]
+            arguments: [
+                image,
+                graded,
+                Float(settings.stock.toneRetention),
+                colorAmount,
+                amount
+            ]
         ) else {
             throw FilmRendererError.renderFailed
         }
@@ -547,7 +561,13 @@ private extension FilmRenderer {
             : pow((encoded + 0.055) / 1.055, 2.4);
     }
 
-    kernel vec4 finishFilmStock(__sample source, __sample graded, float amount) {
+    kernel vec4 finishFilmStock(
+        __sample source,
+        __sample graded,
+        float toneRetention,
+        float colorAmount,
+        float toneAmount
+    ) {
         vec3 srgb = vec3(
             srgbDecode(graded.r),
             srgbDecode(graded.g),
@@ -563,17 +583,21 @@ private extension FilmRenderer {
         float sourceY = max(dot(source.rgb, luma), 0.0);
         float gradedY = max(dot(positiveGrade, luma), 0.000001);
 
-        // These spectral cubes include a complete negative-to-print density
-        // response, but Color Stock is intended to supply color character rather
-        // than replace Granular's tone controls. Keep only a restrained fraction
-        // of the cube's luminance move while preserving its chromatic signature.
-        float restrainedY = mix(sourceY, gradedY, 0.20);
+        // These spectral cubes include a complete film density response, but Film
+        // Tone's own controls stay in charge of tone. Each stock keeps its own
+        // share of the cube's luminance move, so slide film reads denser than a
+        // soft negative, while its chromatic signature is kept whole.
+        float restrainedY = mix(sourceY, gradedY, toneRetention);
         vec3 colorGrade = positiveGrade * (restrainedY / gradedY);
-        vec3 rgb = mix(
-            source.rgb,
-            colorGrade,
-            clamp(amount, 0.0, 2.0)
-        );
+        vec3 rgb = mix(source.rgb, colorGrade, colorAmount);
+
+        // Color and tone share one amount except for black-and-white stocks,
+        // whose color cannot be extrapolated past gray without inverting hues.
+        float mixedY = dot(rgb, luma);
+        float targetY = max(mix(sourceY, restrainedY, toneAmount), 0.0);
+        if (abs(mixedY) > 0.000001) {
+            rgb *= targetY / mixedY;
+        }
         return vec4(rgb, source.a);
     }
     """#

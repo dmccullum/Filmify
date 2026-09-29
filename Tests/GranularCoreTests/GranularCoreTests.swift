@@ -129,37 +129,115 @@ import Testing
     #expect(FilmToneSettings.maximumStockAmount == 2)
 }
 
-@Test func colorStocksRetainColorWithoutImposingASecondStrongContrastCurve() throws {
+@Test func filmStocksCarryTheirOwnRestrainedContrast() throws {
     let renderer = try FilmRenderer()
-    let extent = CGRect(x: 0, y: 0, width: 8, height: 8)
-    let lowSource = CIImage(color: .init(red: 0.12, green: 0.12, blue: 0.12, alpha: 1))
-        .cropped(to: extent)
-    let highSource = CIImage(color: .init(red: 0.68, green: 0.68, blue: 0.68, alpha: 1))
-        .cropped(to: extent)
     let sourceContrast = Float(0.68 - 0.12)
 
-    for stock in FilmStockID.allCases where stock != .none {
-        let recipe = FilmRecipe(
-            id: "stock-contrast-\(stock.rawValue)",
-            name: "Stock Contrast",
-            tone: .init(stock: stock),
-            lightShaping: .init(isEnabled: false),
-            diffusion: .init(isEnabled: false),
-            halation: .init(isEnabled: false),
-            grain: .init(isEnabled: false)
-        )
-        let low = renderFloatPixels(
-            try renderer.render(lowSource, recipe: recipe),
-            extent: extent
-        )
-        let high = renderFloatPixels(
-            try renderer.render(highSource, recipe: recipe),
-            extent: extent
-        )
-        let outputContrast = pixelLuminance(high) - pixelLuminance(low)
+    func contrast(_ stock: FilmStockID) throws -> Float {
+        let low = try renderStockPatches(renderer, stock: stock, colors: [[0.12, 0.12, 0.12]])
+        let high = try renderStockPatches(renderer, stock: stock, colors: [[0.68, 0.68, 0.68]])
+        return pixelLuminance(high[0]) - pixelLuminance(low[0])
+    }
 
-        #expect(outputContrast > sourceContrast * 0.70)
-        #expect(outputContrast < sourceContrast * 1.20)
+    for stock in FilmStockID.allCases where stock != .none {
+        let output = try contrast(stock)
+        #expect(output > sourceContrast * 0.70, "\(stock.name)")
+        #expect(output < sourceContrast * 1.60, "\(stock.name)")
+    }
+
+    // Slide film's extra density shows as deeper shadows below middle gray.
+    func shadowDepth(_ stock: FilmStockID) throws -> Float {
+        let shadow = try renderStockPatches(renderer, stock: stock, colors: [[0.03, 0.03, 0.03]])
+        return pixelLuminance(shadow[0])
+    }
+    #expect(try shadowDepth(.velvia50) < shadowDepth(.portra400) * 0.85)
+}
+
+@Test func filmStocksKeepMiddleGrayNearMiddleGray() throws {
+    let renderer = try FilmRenderer()
+    for stock in FilmStockID.allCases where stock != .none {
+        let gray = try renderStockPatches(renderer, stock: stock, colors: [[0.18, 0.18, 0.18]])[0]
+        let stops = log2(Double(pixelLuminance(gray)) / 0.18)
+        #expect(abs(stops) < 0.34, "\(stock.name) moves middle gray \(stops) stops")
+    }
+}
+
+@Test func everyFilmStockLooksDistinct() throws {
+    let renderer = try FilmRenderer()
+    let patches: [[Float]] = [
+        [0.40, 0.24, 0.17], [0.20, 0.11, 0.07], [0.12, 0.18, 0.06], [0.05, 0.10, 0.03],
+        [0.10, 0.20, 0.45], [0.30, 0.40, 0.55], [0.55, 0.08, 0.06], [0.60, 0.45, 0.06],
+        [0.08, 0.30, 0.30], [0.25, 0.10, 0.35], [0.04, 0.04, 0.04], [0.18, 0.18, 0.18],
+        [0.60, 0.60, 0.60]
+    ]
+    let stocks = FilmStockID.allCases.filter { $0 != .none }
+    let looks = try stocks.map { stock in
+        try renderStockPatches(renderer, stock: stock, colors: patches).map(oklab)
+    }
+
+    var closest = (distance: Float.greatestFiniteMagnitude, pair: "")
+    for first in stocks.indices {
+        for second in stocks.indices where second > first {
+            let distance = zip(looks[first], looks[second])
+                .map { labDistance($0, $1) }
+                .reduce(0, +) / Float(patches.count)
+            if distance < closest.distance {
+                closest = (distance, "\(stocks[first].name) / \(stocks[second].name)")
+            }
+        }
+    }
+    #expect(closest.distance > 0.012, "Closest stocks: \(closest.pair) at \(closest.distance)")
+}
+
+@Test func blackAndWhiteStocksStayNeutralWhenOvercooked() throws {
+    let renderer = try FilmRenderer()
+    for stock in FilmStockID.allCases where stock.isMonochrome {
+        for amount in [1.0, 2.0] {
+            let pixel = try renderStockPatches(
+                renderer, stock: stock, amount: amount, colors: [[0.55, 0.20, 0.08]]
+            )[0]
+            #expect(channelSpread(pixel) < 0.002, "\(stock.name) at \(amount)")
+        }
+    }
+}
+
+@Test func retiredAndUnknownStocksDecodeWithoutLosingTheRecipe() throws {
+    func decode(_ stock: String) throws -> FilmStockID {
+        var recipe = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(FilmRecipe.classic35)
+        ) as! [String: Any]
+        var tone = recipe["tone"] as! [String: Any]
+        tone["stock"] = stock
+        recipe["tone"] = tone
+        let data = try JSONSerialization.data(withJSONObject: recipe)
+        return try JSONDecoder().decode(FilmRecipe.self, from: data).tone.stock
+    }
+
+    #expect(try decode("portra160") == .portra400)
+    #expect(try decode("superiaReala") == .superia400)
+    #expect(try decode("velvia50") == .velvia50)
+    #expect(try decode("someFutureStock") == FilmStockID.none)
+}
+
+@Test func everyFilmStockBelongsToAFamilyAndDescribesItself() {
+    for family in FilmStockFamily.allCases {
+        #expect(!family.stocks.isEmpty)
+    }
+    for stock in FilmStockID.allCases where stock != .none {
+        #expect(stock.family != nil)
+        #expect(!stock.vibe.isEmpty)
+        #expect(!stock.name.contains("/"))
+    }
+}
+
+@Test func stockThumbnailsRenderSmallPreviews() async throws {
+    let service = try ImageProcessingService()
+    for stock in [FilmStockID.none, .velvia50, .triX400] {
+        let data = try await service.renderStockThumbnail(
+            sourceURL: nil, tone: .init(), stock: stock, maximumPixelSize: 96
+        )
+        let image = try #require(CIImage(data: data))
+        #expect(max(image.extent.width, image.extent.height) <= 96)
     }
 }
 
@@ -1202,4 +1280,50 @@ private func meanAbsoluteLuminanceDifference(_ lhs: [Float], _ rhs: [Float]) -> 
         pixels += 1
     }
     return total / Double(max(1, pixels))
+}
+
+private func renderStockPatches(
+    _ renderer: FilmRenderer,
+    stock: FilmStockID,
+    amount: Double = 1,
+    colors: [[Float]]
+) throws -> [[Float]] {
+    let extent = CGRect(x: 0, y: 0, width: colors.count, height: 1)
+    var source = CIImage.empty()
+    for (index, color) in colors.enumerated() {
+        let patch = CIImage(color: .init(
+            red: CGFloat(color[0]), green: CGFloat(color[1]), blue: CGFloat(color[2]), alpha: 1
+        )).cropped(to: CGRect(x: index, y: 0, width: 1, height: 1))
+        source = patch.composited(over: source)
+    }
+    let recipe = FilmRecipe(
+        id: "stock-patches",
+        name: "Stock Patches",
+        tone: .init(stock: stock, stockAmount: amount),
+        lightShaping: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        grain: .init(isEnabled: false)
+    )
+    let pixels = renderFloatPixels(try renderer.render(source, recipe: recipe), extent: extent)
+    return colors.indices.map { Array(pixels[$0 * 4 ..< $0 * 4 + 3]) }
+}
+
+/// OKLab from linear Rec.2020, matching the renderer's film-tone kernel.
+private func oklab(_ rgb: [Float]) -> [Float] {
+    let x = 0.6369580 * rgb[0] + 0.1446169 * rgb[1] + 0.1688809 * rgb[2]
+    let y = 0.2627002 * rgb[0] + 0.6779981 * rgb[1] + 0.0593017 * rgb[2]
+    let z = 0.0280727 * rgb[1] + 1.0609851 * rgb[2]
+    let l = cbrt(max(0.8190224 * x + 0.3619063 * y - 0.1288738 * z, 0))
+    let m = cbrt(max(0.0329837 * x + 0.9292868 * y + 0.0361447 * z, 0))
+    let s = cbrt(max(0.0481772 * x + 0.2642395 * y + 0.6335478 * z, 0))
+    return [
+        0.2104543 * l + 0.7936178 * m - 0.0040720 * s,
+        1.9780000 * l - 2.4285922 * m + 0.4505937 * s,
+        0.0259040 * l + 0.7827718 * m - 0.8086758 * s
+    ]
+}
+
+private func labDistance(_ lhs: [Float], _ rhs: [Float]) -> Float {
+    sqrt(zip(lhs, rhs).map { ($0 - $1) * ($0 - $1) }.reduce(0, +))
 }

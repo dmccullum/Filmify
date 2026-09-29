@@ -1,38 +1,160 @@
 import Foundation
 
+public enum FilmStockFamily: String, CaseIterable, Sendable {
+    case colorNegative
+    case cinema
+    case slide
+    case instant
+    case blackAndWhite
+
+    public var title: String {
+        switch self {
+        case .colorNegative: "Color Negative"
+        case .cinema: "Cinema"
+        case .slide: "Slide"
+        case .instant: "Instant"
+        case .blackAndWhite: "Black & White"
+        }
+    }
+
+    public var stocks: [FilmStockID] {
+        FilmStockID.allCases.filter { $0.family == self }
+    }
+}
+
 public enum FilmStockID: String, CaseIterable, Codable, Hashable, Sendable {
     case none
-    case portra160
     case portra400
-    case gold200
     case ektar100
+    case gold200
+    case ultramax400
     case pro400H
-    case superiaReala
+    case superia400
+    case c200
     case vision250D
+    case vision500T
+    case eterna500
+    case velvia50
+    case provia100F
+    case ektachrome100D
+    case kodachrome64
+    case instax
+    case triX400
+    case doubleX
+
+    /// Stocks from earlier versions that were folded into a close neighbor.
+    static let retiredAliases: [String: FilmStockID] = [
+        "portra160": .portra400,
+        "superiaReala": .superia400
+    ]
+
+    public init(from decoder: Decoder) throws {
+        let rawValue = try decoder.singleValueContainer().decode(String.self)
+        // A recipe from another version must never fail to load over one stock.
+        self = FilmStockID(rawValue: rawValue) ?? Self.retiredAliases[rawValue] ?? .none
+    }
 
     public var name: String {
         switch self {
         case .none: "None"
-        case .portra160: "Portra 160 / Endura"
-        case .portra400: "Portra 400 / Endura"
-        case .gold200: "Gold 200 / Endura"
-        case .ektar100: "Ektar 100 / Endura"
-        case .pro400H: "Pro 400H / Crystal Archive"
-        case .superiaReala: "Superia Reala / Crystal Archive"
-        case .vision250D: "Vision3 250D / 2383"
+        case .portra400: "Portra 400"
+        case .ektar100: "Ektar 100"
+        case .gold200: "Gold 200"
+        case .ultramax400: "UltraMax 400"
+        case .pro400H: "Pro 400H"
+        case .superia400: "Superia 400"
+        case .c200: "C200"
+        case .vision250D: "Vision3 250D"
+        case .vision500T: "Vision3 500T"
+        case .eterna500: "Eterna 500"
+        case .velvia50: "Velvia 50"
+        case .provia100F: "Provia 100F"
+        case .ektachrome100D: "Ektachrome 100D"
+        case .kodachrome64: "Kodachrome 64"
+        case .instax: "Instax"
+        case .triX400: "Tri-X 400"
+        case .doubleX: "Double-X"
+        }
+    }
+
+    /// A one-line description of the stock's character.
+    public var vibe: String {
+        switch self {
+        case .none: "The image's own color"
+        case .portra400: "Soft contrast, warm and forgiving skin"
+        case .ektar100: "Vivid, saturated and punchy"
+        case .gold200: "Golden, nostalgic warmth"
+        case .ultramax400: "Bold everyday color with warm reds"
+        case .pro400H: "Airy pastels and minty greens"
+        case .superia400: "Cool greens, classic drugstore Fuji"
+        case .c200: "Muted and slightly green"
+        case .vision250D: "Clean, natural daylight cinema"
+        case .vision500T: "Cool tungsten night"
+        case .eterna500: "Quiet, desaturated cinema"
+        case .velvia50: "Dense, electric landscape color"
+        case .provia100F: "Clean, neutral slide"
+        case .ektachrome100D: "Crisp, cool blues"
+        case .kodachrome64: "Rich reds, deep shadows"
+        case .instax: "Bright, soft and faded"
+        case .triX400: "Gritty, contrasty black and white"
+        case .doubleX: "Smooth cinema black and white"
+        }
+    }
+
+    public var family: FilmStockFamily? {
+        switch self {
+        case .none: nil
+        case .portra400, .ektar100, .gold200, .ultramax400, .pro400H, .superia400, .c200:
+            .colorNegative
+        case .vision250D, .vision500T, .eterna500: .cinema
+        case .velvia50, .provia100F, .ektachrome100D, .kodachrome64: .slide
+        case .instax: .instant
+        case .triX400, .doubleX: .blackAndWhite
+        }
+    }
+
+    public var isMonochrome: Bool {
+        family == .blackAndWhite
+    }
+
+    /// The share of the cube's own density curve that reaches the image. Film
+    /// Tone's Contrast and Exposure stay in charge of tone, so soft negatives
+    /// keep little of theirs while slide and black-and-white film keep more.
+    var toneRetention: Double {
+        switch self {
+        case .none: 0
+        case .portra400, .pro400H, .c200: 0.20
+        case .gold200, .superia400, .vision250D, .eterna500: 0.25
+        case .ultramax400, .vision500T: 0.30
+        case .ektar100: 0.35
+        case .instax: 0.40
+        case .provia100F, .ektachrome100D: 0.45
+        case .doubleX: 0.35
+        case .kodachrome64: 0.50
+        case .velvia50, .triX400: 0.55
         }
     }
 
     var resourceName: String? {
         switch self {
         case .none: nil
-        case .portra160: "portra_160_endura_premier"
-        case .portra400: "portra_400_endura_premier"
-        case .gold200: "gold_200_endura_premier"
-        case .ektar100: "ektar_100_endura_premier"
-        case .pro400H: "fuji_pro_400h_ca_maxima"
-        case .superiaReala: "fuji_superia_reala_ca_pro_pdii"
-        case .vision250D: "vision3_250d_2383"
+        case .portra400: "portra_400"
+        case .ektar100: "ektar_100"
+        case .gold200: "gold_200"
+        case .ultramax400: "ultramax_400"
+        case .pro400H: "pro_400h"
+        case .superia400: "superia_400"
+        case .c200: "c200"
+        case .vision250D: "vision3_250d"
+        case .vision500T: "vision3_500t"
+        case .eterna500: "eterna_500"
+        case .velvia50: "velvia_50"
+        case .provia100F: "provia_100f"
+        case .ektachrome100D: "ektachrome_100d"
+        case .kodachrome64: "kodachrome_64"
+        case .instax: "instax"
+        case .triX400: "trix_400"
+        case .doubleX: "double_x"
         }
     }
 
