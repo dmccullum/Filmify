@@ -99,7 +99,8 @@ struct EditModeView: View {
                         EditorEmptyState()
                     }
 
-                    if model.isRenderingPreview {
+                    // Edits render live; only the first render of a newly opened photo is slow enough to show.
+                    if model.isRenderingPreview, model.processedPreview == nil {
                         ProgressView()
                             .controlSize(.small)
                             .padding(9)
