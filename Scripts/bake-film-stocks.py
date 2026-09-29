@@ -54,16 +54,11 @@ FAMILY_PRINTS = {
 # greener) and OkLab saturation (sat_adjust).
 # Stocks with a fitted FilmCharacter (FilmCharacter.swift) need no cube.
 STOCKS = [
-    ("ultramax_400", "Kodak Ultramax 400", "kodak",
-     {"exp_kelvin": 7000, "tint": -0.05, "sat_adjust": 1.3}),
-    ("c200", "Fuji C200", "fuji", {"exp_kelvin": 6200, "tint": 0.12, "sat_adjust": 1.0}),
     ("vision3_250d", "Kodak Vision3 250D 5207", "cinema", {}),
     # Tungsten film under warm-white light: printed to neutral gray, it keeps
     # the cool cast of an uncorrected night exterior.
     ("vision3_500t", "Kodak Vision3 500T 5219", "cinema", {"exp_kelvin": 4700, "sat_adjust": 0.95}),
     ("eterna_500", "Fuji Eterna 500", "cinema", {"tint": 0.03, "sat_adjust": 0.7}),
-    ("provia_100f", "Fuji Provia 100F", "slide", {"sat_adjust": 1.1}),
-    ("double_x", "Kodak 5222", "bw", {"print": "Kodak 2302"}),
 ]
 
 

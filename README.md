@@ -44,6 +44,8 @@ Detailed setup and troubleshooting instructions are in [BUILDING.md](BUILDING.md
 
 ## Credits and attribution
 
+The three cinema stocks are baked from the MIT-licensed [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) model; the rest are parametric looks fitted to the author's own reference renderings. See [THIRD_PARTY_NOTICES.txt](Resources/THIRD_PARTY_NOTICES.txt) for details.
+
 Film-stock and manufacturer names are descriptive only. Granular is not endorsed by or affiliated with their trademark owners.
 
 ## License
