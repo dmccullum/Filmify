@@ -86,10 +86,11 @@ struct DropModeView: View {
             }
             return
         }
-        withAnimation(.spring(duration: 0.45, bounce: 0.22)) {
+        // Runs alongside the window settling, on the same curve.
+        withAnimation(.spring(duration: 0.46, bounce: 0.14)) {
             isCanisterSeated = true
         }
-        withAnimation(.easeOut(duration: 0.5).delay(0.22)) {
+        withAnimation(AppModel.modeTransitionAnimation.delay(0.08)) {
             filmOut = 1
         }
     }
@@ -103,10 +104,10 @@ struct DropModeView: View {
             }
             return
         }
-        withAnimation(.easeIn(duration: 0.3)) {
+        withAnimation(.easeIn(duration: 0.26)) {
             filmOut = 0
         }
-        withAnimation(.easeIn(duration: 0.2).delay(0.26)) {
+        withAnimation(.easeIn(duration: 0.24).delay(0.1)) {
             isCanisterSeated = false
         }
     }

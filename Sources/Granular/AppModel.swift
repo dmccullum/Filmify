@@ -3,6 +3,7 @@ import GranularCore
 import Foundation
 import Observation
 import ServiceManagement
+import SwiftUI
 import UniformTypeIdentifiers
 
 enum OperationMode: String, CaseIterable, Identifiable {
@@ -58,21 +59,32 @@ struct ProcessingJob: Identifiable {
 final class AppModel {
     var operationMode: OperationMode = .drop {
         didSet {
-            // Mark the window as settling in the same update as the switch, so
-            // the new mode never shows at the old window size.
+            // Start the transition in the same update as the switch, so each
+            // mode is laid out at its own size from the very first frame.
             if operationMode != oldValue {
                 isSettlingWindow = true
+                arrivingLayoutSize = layoutSize(for: operationMode)
             }
             if operationMode != .drop {
                 isFilmLoaded = false
             }
         }
     }
-    /// The mode being switched to while Instant mode rewinds its film.
-    var pendingMode: OperationMode?
-    /// Whether film is loaded in Instant mode's camera back. It loads once the
-    /// window has settled, and rewinds before the switch to Edit.
+    /// Whether film is loaded in Instant mode's camera back. It loads as the
+    /// window settles into Instant mode and rewinds as it leaves.
     var isFilmLoaded = false
+    /// While switching modes, the size the arriving mode's content will have
+    /// once the window arrives, so it can be laid out there from the start.
+    var arrivingLayoutSize: CGSize?
+
+    /// One duration and curve for everything in a mode switch: the window,
+    /// the crossfade and the film, so it reads as a single motion.
+    static let modeTransitionDuration = 0.42
+    static let modeTransitionCurve = (x1: 0.32, y1: 0.72, x2: 0.0, y2: 1.0)
+    static var modeTransitionAnimation: Animation {
+        let c = modeTransitionCurve
+        return .timingCurve(c.x1, c.y1, c.x2, c.y2, duration: modeTransitionDuration)
+    }
     var recipe: FilmRecipe = .classic35
     var selectedRecipeID = FilmRecipe.classic35.id
     var savedRecipes: [FilmRecipe] = []
@@ -105,7 +117,6 @@ final class AppModel {
     private var processingService: ImageProcessingService?
     private var previewTask: Task<Void, Never>?
     private var resizeTask: Task<Void, Never>?
-    private var modeRequestTask: Task<Void, Never>?
     private var monitor: WatchedFolderMonitor?
     private var activeSecurityURLs: [URL] = []
 
@@ -196,33 +207,6 @@ final class AppModel {
         }.first
     }
 
-    /// Switches modes, rewinding Instant mode's film first when leaving it.
-    func requestMode(_ mode: OperationMode) {
-        modeRequestTask?.cancel()
-        guard mode != operationMode else {
-            // Changed our mind mid-rewind: load the film back in.
-            pendingMode = nil
-            if mode == .drop, !isSettlingWindow {
-                isFilmLoaded = true
-            }
-            return
-        }
-        guard operationMode == .drop, isFilmLoaded,
-              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            pendingMode = nil
-            operationMode = mode
-            return
-        }
-        pendingMode = mode
-        isFilmLoaded = false
-        modeRequestTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(480))
-            guard !Task.isCancelled, let self else { return }
-            self.pendingMode = nil
-            self.operationMode = mode
-        }
-    }
-
     func modeDidChange() {
         if operationMode == .drop, jobs.isEmpty {
             statusMessage = "Ready"
@@ -233,28 +217,45 @@ final class AppModel {
     func scheduleWindowResize(for mode: OperationMode, animated: Bool = true) {
         resizeTask?.cancel()
         resizeTask = Task { [weak self] in
-            if animated {
-                // Let the camera body draw before the window starts moving.
-                try? await Task.sleep(for: .milliseconds(20))
-            }
             guard !Task.isCancelled, let self, self.operationMode == mode else { return }
+            if mode == .drop {
+                // The film loads alongside the resize, not after it.
+                self.isFilmLoaded = true
+            }
             await self.resizeWindow(for: mode, animated: animated)
             guard !Task.isCancelled, self.operationMode == mode else { return }
-            self.isSettlingWindow = false
-            if mode == .drop {
-                self.isFilmLoaded = true
+            withAnimation(.easeOut(duration: 0.18)) {
+                self.isSettlingWindow = false
+                self.arrivingLayoutSize = nil
             }
         }
     }
 
-    private func resizeWindow(for mode: OperationMode, animated: Bool) async {
-        guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) else { return }
+    private var mainWindow: NSWindow? {
+        NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible })
+    }
+
+    private func targetContentSize(for mode: OperationMode, in window: NSWindow) -> NSSize {
         var contentSize = mode == .drop
             ? NSSize(width: 700, height: 400)
             : NSSize(width: 1_080, height: 970)
         if let visibleFrame = window.screen?.visibleFrame {
             contentSize.height = min(contentSize.height, visibleFrame.height - 28)
         }
+        return contentSize
+    }
+
+    /// The area below the toolbar that a mode's content gets at its window size.
+    private func layoutSize(for mode: OperationMode) -> CGSize? {
+        guard let window = mainWindow, let contentView = window.contentView else { return nil }
+        let toolbarHeight = contentView.bounds.height - window.contentLayoutRect.height
+        let size = targetContentSize(for: mode, in: window)
+        return CGSize(width: size.width, height: size.height - toolbarHeight)
+    }
+
+    private func resizeWindow(for mode: OperationMode, animated: Bool) async {
+        guard let window = mainWindow else { return }
+        let contentSize = targetContentSize(for: mode, in: window)
         let targetFrameSize = window.frameRect(
             forContentRect: NSRect(origin: .zero, size: contentSize)
         ).size
@@ -284,8 +285,11 @@ final class AppModel {
             // setFrame(animate:), so SwiftUI keeps drawing while the size changes.
             await withCheckedContinuation { continuation in
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.34
-                    context.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0.7, 0.2, 1)
+                    let c = Self.modeTransitionCurve
+                    context.duration = Self.modeTransitionDuration
+                    context.timingFunction = CAMediaTimingFunction(
+                        controlPoints: Float(c.x1), Float(c.y1), Float(c.x2), Float(c.y2)
+                    )
                     window.animator().setFrame(targetFrame, display: true)
                 } completionHandler: {
                     continuation.resume()

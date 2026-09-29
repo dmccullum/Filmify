@@ -9,23 +9,31 @@ struct ContentView: View {
     var body: some View {
         @Bindable var model = model
 
-        // The camera body stays up, film unloaded, while the window resizes
-        // between modes; the editor only appears once the window is full size.
-        let showsCameraBody = model.operationMode == .drop || model.isSettlingWindow
+        let showsCameraBody = model.operationMode == .drop
 
+        // A mode switch is one motion: the window resizes while the two modes
+        // crossfade, each held at its own size so neither reflows mid-move.
         ZStack {
-            if showsCameraBody {
-                DropModeView()
+            if showsCameraBody || model.isSettlingWindow {
+                AlloySurface()
+                    .ignoresSafeArea()
                     .transition(.opacity)
-            } else {
+            }
+            switch model.operationMode {
+            case .drop:
+                DropModeView()
+                    .holdingLayoutDuringModeChange(for: .drop)
+                    .transition(.opacity)
+            case .edit:
                 EditModeView()
-                    .transition(modeContentTransition)
+                    .holdingLayoutDuringModeChange(for: .edit)
+                    .transition(.opacity)
             }
         }
-        .animation(modeContentAnimation, value: showsCameraBody)
+        .animation(modeContentAnimation, value: model.operationMode)
         .frame(minWidth: 620, minHeight: 340)
         .overlay(alignment: .topTrailing) {
-            if !showsCameraBody {
+            if !showsCameraBody, !model.isSettlingWindow {
                 Rectangle()
                     .fill(Color(nsColor: .separatorColor))
                     .frame(width: 1)
@@ -34,7 +42,7 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
-        .toolbarBackgroundVisibility(showsCameraBody ? .hidden : .automatic, for: .windowToolbar)
+        .toolbarBackgroundVisibility(showsCameraBody || model.isSettlingWindow ? .hidden : .automatic, for: .windowToolbar)
         .toolbar(removing: showsCameraBody ? .title : nil)
         .toolbar {
             if showsCameraBody {
@@ -80,17 +88,45 @@ struct ContentView: View {
         )
     }
 
-    private var modeContentTransition: AnyTransition {
-        if reduceMotion {
-            return .opacity
+    private var modeContentAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.12) : AppModel.modeTransitionAnimation
+    }
+}
+
+private struct ModeChangeLayoutHold: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let mode: OperationMode
+    @State private var settledSize: CGSize?
+
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            let size = layoutSize(live: proxy.size)
+            content
+                .frame(width: size.width, height: size.height)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                .onChange(of: proxy.size, initial: true) { _, newSize in
+                    if !model.isSettlingWindow {
+                        settledSize = newSize
+                    }
+                }
         }
-        return .opacity.combined(with: .scale(scale: 0.992))
     }
 
-    private var modeContentAnimation: Animation {
-        reduceMotion
-            ? .easeOut(duration: 0.12)
-            : .easeInOut(duration: 0.24)
+    /// Live size normally; during a mode switch, the arriving mode is laid out
+    /// at its final size and the leaving mode keeps the size it had. Both are
+    /// pinned top-centre, where the window resizes around them.
+    private func layoutSize(live: CGSize) -> CGSize {
+        guard model.isSettlingWindow else { return live }
+        if model.operationMode == mode {
+            return model.arrivingLayoutSize ?? live
+        }
+        return settledSize ?? live
+    }
+}
+
+extension View {
+    func holdingLayoutDuringModeChange(for mode: OperationMode) -> some View {
+        modifier(ModeChangeLayoutHold(mode: mode))
     }
 }
 
@@ -98,13 +134,9 @@ private struct ModePicker: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Picker(
-            "Mode",
-            selection: Binding(
-                get: { model.pendingMode ?? model.operationMode },
-                set: { model.requestMode($0) }
-            )
-        ) {
+        @Bindable var model = model
+
+        Picker("Mode", selection: $model.operationMode) {
             ForEach(OperationMode.allCases) { mode in
                 Text(mode.rawValue).tag(mode)
             }
