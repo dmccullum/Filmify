@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generates AppIcon.icon, Granular's Icon Composer icon.
 
-The top of a 35mm film canister fills the icon: its left edge and ribbed cap are the
-icon's left and top edges, and a sliver of film comes out of the light-trap lip. The
-canister's lighting is computed from a cylinder so it reads round, the background is
+A 35mm film canister stands in the left of the icon, seen straight on, with its film
+leader coming out of the light-trap lip. The canister runs off the icon's left, top and
+bottom edges, so the icon's own shape trims it, and its caps are as thin as a real
+tin's. Its lighting is computed from a cylinder so it reads round, the background is
 aluminum in light mode and magnesium in dark, and Clear/Tinted use their own
 high-contrast monochrome artwork.
 
@@ -30,8 +31,6 @@ def lin(c0, c1, x0, y0, x1, y1):
     return {"linear-gradient": [p3(c0), p3(c1)],
             "orientation": {"start": {"x": x0, "y": y0}, "stop": {"x": x1, "y": y1}}}
 
-YELLOW, YELLOW_D, RED, INK, CAP, CAP_L = "#F5BE12", "#D99A06", "#E2471B", "#161616", "#232326", "#3A3B3F"
-FILM, FILM_D, BASE, BASE_D, STEEL, STEEL_D = "#D06A22", "#9C4613", "#3B281D", "#24180F", "#C9CDD1", "#7D8287"
 
 def rrect(x, y, w, h, r):
     r = min(r, w/2, h/2)
@@ -42,14 +41,14 @@ def rrect(x, y, w, h, r):
             (x+r, y, w-2*r, r, r, r, r, h-2*r, r, r, -r, r, -(w-2*r), r, r, -r, -r, -(h-2*r), r, r, r, -r))
 
 OUT = os.environ.get("ICON_OUT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AppIcon.icon")
-# Proportions measured from a real 35mm canister, scaled so it is 700 wide.
-BODY_R = 700            # canister's right edge; its left edge is the icon's
-CAP_H = 78              # thin top cap, flush with the icon's top edge
-LIP_W = 96              # the velvet light-trap lip runs down the canister's right side
-FILM_T = CAP_H + 8      # the film is as tall as the body, its top nearly flush with it
-PANEL_R = 300           # "split" label: coloured panel, then a dark face (as in the app)
-LABEL = os.environ.get("ICON_LABEL", "split")
-RED_W = int(os.environ.get("ICON_RED") or (56 if LABEL == "split" else 22))  # the red accent stripe
+# Proportions follow a real 35mm canister, which stands 600 wide in the icon's left side.
+BODY_R = 600            # canister's right edge; its left, top and bottom run off the icon
+CAP_H = 58              # the thin top and bottom caps
+CAP_CORNER = 24         # the caps' outer corners down the right side
+INSET = 12              # the label sits just inside the caps
+LIP_W = 58              # the velvet light-trap lip runs down the canister's right side
+PANEL_R, RED_W = 330, 80    # label: a yellow panel, a red stripe, then the black face (as in the app)
+FILM_T, FILM_R = 150, 952   # the film leader's top edge (mirrored at the bottom) and its right end
 
 def rgb(h): h = h.lstrip("#"); return [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
 def hexs(c): return "#%02x%02x%02x" % tuple(round(max(0, min(1, v)) * 255) for v in c)
@@ -81,18 +80,6 @@ def cylinder(gid, dark, base, light, x0=0, x1=BODY_R, steps=48, spec_scale=1.0):
     return ('<linearGradient id="%s" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="%s" y2="0">%s</linearGradient>'
             % (gid, x0, x1, stops))
 
-def overlay(gid, x0=0, x1=BODY_R, steps=40, strength=1.0):
-    """The same lighting as black/white alpha, for textured parts like the ribbed cap."""
-    stops = ""
-    for i in range(steps + 1):
-        x = i / steps
-        diffuse, spec, bounce = lighting(x)
-        v = diffuse - 0.7 + bounce + spec * 0.6
-        color, alpha = ("#fff", min(0.3, v * 0.9)) if v > 0 else ("#000", min(0.8, -v * 1.2))
-        stops += '<stop offset="%.4f" stop-color="%s" stop-opacity="%.3f"/>' % (x, color, alpha * strength)
-    return ('<linearGradient id="%s" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="%s" y2="0">%s</linearGradient>'
-            % (gid, x0, x1, stops))
-
 def svg(defs, body):
     return ('<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" '
             'viewBox="0 0 1024 1024"><defs>%s</defs>%s</svg>\n' % (defs, body))
@@ -100,8 +87,8 @@ def svg(defs, body):
 # Palettes: colour, and a high-contrast monochrome set for Clear and Tinted.
 COLOR = {
     "yellow": ("#7A3400", "#FFC20A", "#FFDF7A"), "red": ("#5A0E02", "#EE4A1A", "#FF8C62"),
-    "black": ("#000000", "#1D1D20", "#55575E"), "cap": ("#0E0E10", "#4E5057"),
-    "film": ("#8A4A1C", "#6A3413", "#4A220B", "#2A1206"), "lip": "#0c0a09", "lipline": "#2d2622",
+    "black": ("#000000", "#1D1D20", "#55575E"), "cap": ("#0E0E10", "#5A5C63"),
+    "film": ("#E8893A", "#C9631F", "#A04A14", "#6E300B"), "lip": "#0c0a09", "lipline": "#2d2622",
 }
 # Four clear values: bright canister, mid film, black face and lip, dark cap.
 MONO = {
@@ -110,57 +97,69 @@ MONO = {
     "film": ("#A2A2A2", "#929292", "#828282", "#727272"), "lip": "#000000", "lipline": "#141414",
 }
 
+def outline(right):
+    """The canister's silhouette: square on the left (the icon trims it), rounded caps on the right."""
+    return rrect(-80, 0, right + 80, 1024, CAP_CORNER)
+
 def body_svg(P):
-    x0, top = -60, CAP_H - 6
-    defs = "".join(cylinder(k, *P[k]) for k in ("yellow", "red", "black"))
-    if LABEL == "split":
-        # Coloured panel, a thin accent, then the dark face, as on the app's canisters.
-        parts = [(x0, PANEL_R - x0, "yellow"), (PANEL_R, RED_W, "red"), (PANEL_R + RED_W, BODY_R - PANEL_R - RED_W, "black")]
-        b = "".join('<rect x="%s" y="%s" width="%s" height="1200" fill="url(#%s)"/>' % (x, top, w, g) for x, w, g in parts)
-    else:
-        w = BODY_R - x0
-        bands = [(top, 96, "black"), (top + 96, RED_W, "red"), (top + 96 + RED_W, 1100, "yellow")]
-        b = "".join('<rect x="%s" y="%s" width="%s" height="%s" fill="url(#%s)"/>' % (x0, y, w, h, g) for y, h, g in bands)
-    return svg(defs, b)
+    defs = ('<clipPath id="b"><path d="%s"/></clipPath>' % outline(BODY_R - INSET)
+            + "".join(cylinder(k, *P[k]) for k in ("yellow", "red", "black")))
+    parts = [(-80, PANEL_R + 80, "yellow"), (PANEL_R, RED_W, "red"), (PANEL_R + RED_W, BODY_R, "black")]
+    label = "".join('<rect x="%s" y="-80" width="%s" height="1200" fill="url(#%s)"/>' % (x, w, g) for x, w, g in parts)
+    x, w = BODY_R - INSET - LIP_W, LIP_W + INSET
+    lines = "".join('<rect x="%s" y="%s" width="%s" height="3" fill="%s"/>' % (x, y, w, P["lipline"]) for y in range(0, 1024, 9))
+    lip = ('<rect x="%s" y="-80" width="%s" height="1200" fill="%s"/>%s'
+           '<rect x="%s" y="-80" width="%s" height="1200" fill="url(#ls)"/>' % (x, w, P["lip"], lines, x, w))
+    # The top cap stands proud of the label and shades it.
+    shade = '<rect x="-80" y="%s" width="%s" height="42" fill="url(#sh)"/>' % (CAP_H - 2, BODY_R + 80)
+    defs += ('<linearGradient id="ls" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="%s" y2="0">'
+             '<stop offset="0" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#000" stop-opacity="0.6"/></linearGradient>'
+             '<linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.45"/>'
+             '<stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>' % (x, x + LIP_W))
+    return svg(defs, '<g clip-path="url(#b)">%s%s%s</g>' % (label, lip, shade))
 
 def cap_svg(P):
-    """A thin, smooth, glossy cap, standing just proud of the body."""
-    r = 16
-    d = "M-60,-60 H%s V%s a%s,%s 0 0 1 -%s,%s H-60 Z" % (BODY_R, CAP_H - r, r, r, r, r)
-    vert = ('<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.25"/>'
-            '<stop offset="0.7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.5"/></linearGradient>')
-    defs = '<clipPath id="c"><path d="%s"/></clipPath>' % d + overlay("s") + vert
-    body = ('<g clip-path="url(#c)"><rect x="-60" y="-60" width="800" height="%s" fill="%s"/>'
-            '<rect x="-60" y="-60" width="800" height="%s" fill="url(#s)"/>'
-            '<rect x="-60" y="-60" width="800" height="%s" fill="url(#v)"/>'
-            '<rect x="-60" y="%s" width="800" height="3" fill="%s" fill-opacity="0.5"/></g>'
-            % (CAP_H + 70, P["cap"][0], CAP_H + 70, CAP_H + 70, CAP_H - 9, P["cap"][1]))
+    """Thin, smooth, glossy caps, standing just proud of the body, with a lit rim on each."""
+    c = P["cap"]
+    defs = ('<clipPath id="o"><path d="%s"/></clipPath>' % outline(BODY_R)
+            + cylinder("m", c[0], hexs(mix(rgb(c[0]), rgb(c[1]), 0.45)), c[1]) +
+            '<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.10"/>'
+            '<stop offset="1" stop-color="#000" stop-opacity="0.35"/></linearGradient>')
+    top, bottom = 1024 - CAP_H, 1104
+    body = ('<g clip-path="url(#o)">'
+            '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#m)"/>'
+            '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#v)"/>'
+            '<rect x="-80" y="%s" width="%s" height="%s" fill="url(#m)"/>'
+            '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.22"/>'
+            '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.14"/></g>'
+            % (BODY_R + 80, CAP_H + 80, BODY_R + 80, CAP_H + 80, top, BODY_R + 80, bottom - top,
+               CAP_H - 5, BODY_R + 80, top + 1, BODY_R + 80))
     return svg(defs, body)
 
-def lip_svg(P):
-    x, y, w = BODY_R - LIP_W, CAP_H - 6, LIP_W + 10
-    h = 1100 - y
-    lines = "".join('<rect x="%s" y="%s" width="%s" height="3" fill="%s"/>' % (x, yy, w, P["lipline"]) for yy in range(y + 10, 1060, 9))
-    defs = ('<clipPath id="l"><path d="%s"/></clipPath>' % rrect(x, y, w, h, 18) +
-            '<linearGradient id="ls" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="%s" y2="0">'
-            '<stop offset="0" stop-color="#fff" stop-opacity="0.1"/><stop offset="1" stop-color="#000" stop-opacity="0.7"/></linearGradient>' % (x, x + w))
-    return svg(defs, '<g clip-path="url(#l)"><rect x="%s" y="%s" width="%s" height="%s" fill="%s"/>%s'
-                     '<rect x="%s" y="%s" width="%s" height="%s" fill="url(#ls)"/></g>' % (x, y, w, h, P["lip"], lines, x, y, w, h))
-
 def film_svg(P):
-    x0 = BODY_R - LIP_W / 2
-    d = rrect(x0, FILM_T, 1200 - x0, 1200 - FILM_T, 0)
-    # Real 35mm perforations: taller than they are wide, 4.75 mm apart.
-    x = BODY_R + 30
-    while x < 1100:
-        d += rrect(x, FILM_T + 50, 60, 96, 12); x += 146
+    """The leader, as tall as the label, cut to half height at its end."""
+    x0 = BODY_R - INSET - LIP_W - 10
+    t, b = FILM_T, 1024 - FILM_T
+    tongue_b = t + (b - t) * 0.5
+    xs, xe, rr = FILM_R - 182, FILM_R, 70
+    d = ("M%s,%s H%s A%s,%s 0 0 1 %s,%s V%s A%s,%s 0 0 1 %s,%s H%s C%s,%s %s,%s %s,%s V%s H%s Z"
+         % (x0, t, xe - rr, rr, rr, xe, t + rr, tongue_b - rr * 0.6, rr * 0.6, rr * 0.6, xe - rr * 0.6, tongue_b,
+            xs + 150, xs + 60, tongue_b, xs + 40, b, xs - 40, b, b, x0))
+    # Real 35mm perforations: taller than they are wide.
+    ph, pw, pitch = 64, 42, 96
+    x = BODY_R + 26
+    while x + pw < xe - 30:
+        d += rrect(x, t + 26, pw, ph, 10)
+        if x + pw < xs - 20:
+            d += rrect(x, b - 26 - ph, pw, ph, 10)
+        x += pitch
     f = P["film"]
-    defs = ('<linearGradient id="f" gradientUnits="userSpaceOnUse" x1="0" y1="%s" x2="0" y2="1024">'
-            '<stop offset="0" stop-color="%s"/><stop offset="0.12" stop-color="%s"/>'
-            '<stop offset="0.55" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>' % ((FILM_T,) + f) +
-            '<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="1024" y2="0">'
-            '<stop offset="0" stop-color="#000" stop-opacity="0.6"/><stop offset="0.25" stop-color="#000" stop-opacity="0"/>'
-            '<stop offset="0.55" stop-color="#FFD2A8" stop-opacity="0.16"/><stop offset="0.7" stop-color="#FFD2A8" stop-opacity="0"/></linearGradient>' % (BODY_R - LIP_W / 2))
+    defs = ('<linearGradient id="f" gradientUnits="userSpaceOnUse" x1="0" y1="%s" x2="0" y2="%s">'
+            '<stop offset="0" stop-color="%s"/><stop offset="0.15" stop-color="%s"/>'
+            '<stop offset="0.6" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>' % ((t, b) + f) +
+            '<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="1000" y2="0">'
+            '<stop offset="0" stop-color="#000" stop-opacity="0.6"/><stop offset="0.2" stop-color="#000" stop-opacity="0"/>'
+            '<stop offset="0.6" stop-color="#FFD2A8" stop-opacity="0.18"/><stop offset="0.8" stop-color="#FFD2A8" stop-opacity="0"/></linearGradient>' % x0)
     return svg(defs, '<path fill="url(#f)" fill-rule="evenodd" d="%s"/><path fill="url(#g)" fill-rule="evenodd" d="%s"/>' % (d, d))
 
 def layer(name):
@@ -172,7 +171,7 @@ def group(name, layers, translucency=0.0, shadow="neutral"):
             "translucency": {"enabled": translucency > 0, "value": translucency}}
 
 shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT + "/Assets")
-for name, build in {"cap": cap_svg, "body": body_svg, "lip": lip_svg, "film": film_svg}.items():
+for name, build in {"cap": cap_svg, "body": body_svg, "film": film_svg}.items():
     open("%s/Assets/%s.svg" % (OUT, name), "w").write(build(COLOR))
     open("%s/Assets/%s-mono.svg" % (OUT, name), "w").write(build(MONO))
 
@@ -182,8 +181,7 @@ doc = {
     "fill": aluminum,
     "fill-specializations": [{"value": aluminum}, {"appearance": "dark", "value": magnesium}],
     "groups": [
-        group("Cap", [layer("cap")]),
-        group("Canister", [layer("lip"), layer("body")]),
+        group("Canister", [layer("cap"), layer("body")]),
         group("Film", [layer("film")], translucency=0.1, shadow="layer-color"),
     ],
     "supported-platforms": {"circles": ["watchOS"], "squares": "shared"},

@@ -56,7 +56,7 @@
   ],
   "groups": [
     {
-      "name": "Cap",
+      "name": "Canister",
       "layers": [
         {
           "name": "cap",
@@ -67,32 +67,6 @@
             {
               "appearance": "tinted",
               "value": "cap-mono.svg"
-            }
-          ]
-        }
-      ],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
-      },
-      "specular": true,
-      "translucency": {
-        "enabled": false,
-        "value": 0.0
-      }
-    },
-    {
-      "name": "Canister",
-      "layers": [
-        {
-          "name": "lip",
-          "image-name-specializations": [
-            {
-              "value": "lip.svg"
-            },
-            {
-              "appearance": "tinted",
-              "value": "lip-mono.svg"
             }
           ]
         },
