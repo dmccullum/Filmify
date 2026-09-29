@@ -44,8 +44,6 @@ Detailed setup and troubleshooting instructions are in [BUILDING.md](BUILDING.md
 
 ## Credits and attribution
 
-The bundled color-stock cubes are selected from [ComfyUI-Darkroom](https://github.com/jeremieLouvaert/ComfyUI-Darkroom) and its MIT-licensed spectral film model. See [THIRD_PARTY_NOTICES.txt](Resources/THIRD_PARTY_NOTICES.txt) for details.
-
 Film-stock and manufacturer names are descriptive only. Granular is not endorsed by or affiliated with their trademark owners.
 
 ## License
