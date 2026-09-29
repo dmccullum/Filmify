@@ -140,6 +140,11 @@ em { font-weight: 500; }
 .edit-frame { width: 78%; top: 0; right: -5%; transform: rotate(1.5deg); }
 .instant-frame { width: 49%; top: 48%; left: 1%; transform: rotate(-2deg); }
 
+@media (min-width: 1360px) {
+  .workbench-views { width: min(1500px, 64vw); margin: -15vw 0 0 auto; }
+  .edit-frame { right: 0; }
+}
+
 .ingredients-scatter {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -171,6 +176,7 @@ em { font-weight: 500; }
 .lens-blur-card { grid-column: 6 / 10; grid-row: 2; transform: rotate(2deg); }
 .diffusion-card { grid-column: 9 / 13; grid-row: 3; transform: rotate(3deg); }
 .halation-card { grid-column: 3 / 7; grid-row: 3; transform: rotate(-2deg); }
+.glow-card { grid-column: 1 / 5; grid-row: 4; transform: rotate(-2deg); }
 .grain-card {
   grid-column: 6 / 10;
   grid-row: 4;
@@ -219,7 +225,8 @@ em { font-weight: 500; }
   padding: var(--section-y) var(--page-x);
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
   background: var(--yellow);
   overflow: hidden;
 }
@@ -255,10 +262,10 @@ footer a:hover { color: var(--yellow); }
   .lens-blur-card { grid-column: 2; grid-row: 3; }
   .diffusion-card { grid-column: 1; grid-row: 4; }
   .halation-card { grid-column: 2; grid-row: 4; }
-  .grain-card { grid-column: 1; grid-row: 5; }
+  .glow-card { grid-column: 1; grid-row: 5; }
+  .grain-card { grid-column: 2; grid-row: 5; }
 
   .comparison-gallery, .comparison-intro { width: 86vw; }
-  .last-frame { align-items: flex-start; }
 }
 
 @media (max-width: 640px) {
@@ -290,8 +297,8 @@ footer a:hover { color: var(--yellow); }
   .ingredient { width: min(82vw, 340px); min-height: 0; padding: 18px; }
   .ingredient h3 { font-size: 43px; }
   .ingredient p { font-size: 13px; }
-  .tone-card, .lens-blur-card, .halation-card { align-self: flex-end; }
-  .vignette-card, .diffusion-card, .grain-card { align-self: flex-start; }
+  .tone-card, .lens-blur-card, .halation-card, .grain-card { align-self: flex-end; }
+  .vignette-card, .diffusion-card, .glow-card { align-self: flex-start; }
 
   .comparison-story { padding: 76px 0; }
   .comparison-intro { width: 88vw; margin-bottom: 30px; }

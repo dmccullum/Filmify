@@ -28,19 +28,19 @@ export default function Home() {
           <img src={asset("/film-canister-hero.png")} alt="A 35mm film canister with a curling strip of film" />
         </figure>
         <div className="opening-action">
-          <p>A native macOS app for adding film-like halation, grain, and more to your images.</p>
+          <p>A native macOS app for adding film-like halation, grain, and more to your images. Pick a recipe, drop your photos on the film, and they’re done.</p>
           <a className="stamp stamp-yellow" href="https://github.com/dmccullum/Granular">GET GRANULAR <b>↗</b></a>
         </div>
       </section>
 
       <section className="workbench">
-        <div className="workbench-words"><span>Process a photo</span><em>in seconds,</em><span>or edit it live.</span></div>
+        <div className="workbench-words"><span>Drop photos in</span><em>for instant results,</em><span>or edit live.</span></div>
         <div className="workbench-views">
           <figure className="app-frame edit-frame" data-parallax="-18">
-            <img src={asset("/granular-edit.png")} alt="Granular Edit mode" />
+            <img src={asset("/granular-edit.png")} alt="Granular Edit mode with live preview and adjustment panels" />
           </figure>
           <figure className="app-frame instant-frame" data-parallax="14">
-            <img src={asset("/granular-instant.png")} alt="Granular Instant mode" />
+            <img src={asset("/granular-instant.png")} alt="Granular Instant mode: a film canister and a strip of frames to drop images onto" />
           </figure>
         </div>
       </section>
@@ -48,11 +48,12 @@ export default function Home() {
       <section className="ingredients-scatter">
         <h2>Tools for a<br /><em>film-like finish.</em></h2>
         <article className="ingredient tone-card" data-parallax="-14"><span>01</span><h3>FILM TONE</h3><p>Color stock, exposure, contrast, saturation, vibrance, and warmth—shaped with a gentler response.</p></article>
-        <article className="ingredient vignette-card" data-parallax="11"><span>02</span><h3>VIGNETTE</h3><p>Set the frame’s falloff with a photographic, lens-like vignette.</p></article>
+        <article className="ingredient vignette-card" data-parallax="11"><span>02</span><h3>VIGNETTE</h3><p>Set the frame’s falloff and focus with a photographic, lens-like vignette.</p></article>
         <article className="ingredient lens-blur-card" data-parallax="-10"><span>03</span><h3>LENS BLUR</h3><p>Off-axis optical blur with optional prismatic RGB separation.</p></article>
         <article className="ingredient diffusion-card" data-parallax="13"><span>04</span><h3>DIFFUSION</h3><p>Black Pro-Mist-style bloom that gathers around the light.</p></article>
         <article className="ingredient halation-card" data-parallax="-12"><span>05</span><h3>HALATION</h3><p>A restrained warm spill where bright light meets the darker world.</p></article>
-        <article className="ingredient grain-card" data-parallax="10"><span>06</span><h3>FILM GRAIN</h3><p>Light-responsive texture with scale, variation, chroma, and character.</p></article>
+        <article className="ingredient glow-card" data-parallax="-9"><span>06</span><h3>LANDSCAPE GLOW</h3><p>Detail-preserving softness that lifts the light without flattening the shadows.</p></article>
+        <article className="ingredient grain-card" data-parallax="10"><span>07</span><h3>FILM GRAIN</h3><p>Light-responsive texture with scale, variation, chroma, and character.</p></article>
       </section>
 
       <section className="comparison-story">
