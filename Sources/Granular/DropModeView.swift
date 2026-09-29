@@ -42,7 +42,8 @@ struct DropModeView: View {
                 isTargeted: model.isDropTargeted,
                 reduceMotion: reduceMotion,
                 onCanister: { RecipeMenuPresenter.popUp(model: model) },
-                onChoose: { model.chooseImagesForDroplet() }
+                onChoose: { model.chooseImagesForDroplet() },
+                onReveal: { model.reveal($0) }
             )
             .padding(.horizontal, 10)
             .padding(.top, 2)
@@ -114,8 +115,8 @@ struct DropModeView: View {
 
     private var exposedFrames: [ExposedFrame] {
         model.jobs.compactMap { job -> ExposedFrame? in
-            guard case .finished = job.state, job.id != exposure?.jobID else { return nil }
-            return ExposedFrame(id: job.id, image: roll.thumbnails[job.id]?.image)
+            guard case .finished(let outputURL) = job.state, job.id != exposure?.jobID else { return nil }
+            return ExposedFrame(id: job.id, image: roll.thumbnails[job.id]?.image, outputURL: outputURL)
         }
         .prefix(4)
         .map { $0 }
@@ -230,6 +231,7 @@ struct GateExposure: Equatable {
 struct ExposedFrame: Identifiable, Equatable {
     let id: UUID
     let image: CGImage?
+    let outputURL: URL
 }
 
 // MARK: - Chamber
@@ -248,6 +250,7 @@ private struct FilmChamber: View {
     let reduceMotion: Bool
     let onCanister: () -> Void
     let onChoose: () -> Void
+    let onReveal: (URL) -> Void
 
     var body: some View {
         GeometryReader { geometry in
@@ -302,7 +305,8 @@ private struct FilmChamber: View {
                     framesWound: framesWound,
                     isTargeted: isTargeted,
                     reduceMotion: reduceMotion,
-                    onChoose: onChoose
+                    onChoose: onChoose,
+                    onReveal: onReveal
                 )
                 .frame(width: stripWidth, height: stripHeight)
                 // Loading: the film slides out of the canister's lip toward the take-up.
@@ -478,6 +482,7 @@ private struct FilmStrip: View {
     let isTargeted: Bool
     let reduceMotion: Bool
     let onChoose: () -> Void
+    let onReveal: (URL) -> Void
 
     private let curlAngles: [Double] = stride(from: 4.0, through: 88, by: 4).map { $0 }
 
@@ -609,10 +614,19 @@ private struct FilmStrip: View {
                     .frame(width: slot.width, height: slot.height)
 
                     ForEach(frames) { frame in
-                        NegativeFrame(image: frame.image)
-                            .frame(width: slot.width, height: slot.height)
-                            .clipShape(RoundedRectangle(cornerRadius: 2))
-                            .accessibilityLabel("Processed image")
+                        Button {
+                            onReveal(frame.outputURL)
+                        } label: {
+                            NegativeFrame(image: frame.image)
+                                .frame(width: slot.width, height: slot.height)
+                                .clipShape(RoundedRectangle(cornerRadius: 2))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .pointerStyle(.link)
+                        .help("Show in Finder")
+                        .accessibilityLabel(frame.outputURL.lastPathComponent)
+                        .accessibilityHint("Shows the processed image in Finder")
                     }
 
                     ForEach(0..<blankCount, id: \.self) { _ in
@@ -875,12 +889,12 @@ private struct FilmBackStatusBar: View {
 
             Spacer(minLength: 20)
 
-            if let last = model.jobs.first {
-                CompactJobStatus(job: last)
-            } else {
-                Text(model.statusMessage)
-                    .engraved()
+            // Progress shows on the film itself; only a failure needs words.
+            if case .failed(let message) = model.jobs.first?.state {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
                     .lineLimit(1)
+                    .help(message)
             }
 
             HStack(spacing: 6) {
@@ -911,39 +925,3 @@ private struct FilmBackStatusBar: View {
     }
 }
 
-struct CompactJobStatus: View {
-    @Environment(AppModel.self) private var model
-    let job: ProcessingJob
-
-    var body: some View {
-        HStack(spacing: 6) {
-            switch job.state {
-            case .queued:
-                Image(systemName: "clock")
-            case .processing:
-                ProgressView().controlSize(.small)
-            case .finished:
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            case .failed:
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            }
-            Text(job.sourceURL.lastPathComponent)
-                .lineLimit(1)
-            switch job.state {
-            case .finished(let outputURL):
-                Button {
-                    model.reveal(outputURL)
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .accessibilityLabel("Show in Finder")
-                .help("Show in Finder")
-            default:
-                Text(job.state.label)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
