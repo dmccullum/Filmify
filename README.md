@@ -42,15 +42,19 @@ open -R dist/Granular.app
 
 Detailed setup and troubleshooting instructions are in [BUILDING.md](BUILDING.md).
 
-## Notes on distribution
-
-Local builds are ad-hoc signed for use on the Mac that builds them. A broadly distributable macOS release will require Developer ID signing and Apple notarization.
-
 ## Credits and attribution
 
 The bundled color-stock cubes are selected from [ComfyUI-Darkroom](https://github.com/jeremieLouvaert/ComfyUI-Darkroom) and its MIT-licensed spectral film model. See [THIRD_PARTY_NOTICES.txt](Resources/THIRD_PARTY_NOTICES.txt) for details.
 
 Film-stock and manufacturer names are descriptive only. Granular is not endorsed by or affiliated with their trademark owners.
+
+## License
+
+Copyright (c) 2026 Daniel McCullum.
+
+Granular is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is distributed in the hope that it will be useful, but without any warranty; see the license for details.
+
+Bundled third-party components keep their original licenses.
 
 ## Further reading
 
