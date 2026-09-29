@@ -47,17 +47,17 @@ struct AlloySurface: View {
         ZStack {
             LinearGradient(
                 colors: isDark
-                    ? [Color(hex: 0x2A2B2D), Color(hex: 0x202123), Color(hex: 0x19191B)]
+                    ? [Color(hex: 0x1B1C1E), Color(hex: 0x131415), Color(hex: 0x0D0E0F)]
                     : [Color(hex: 0xDCDEE0), Color(hex: 0xCDD0D3), Color(hex: 0xBFC2C6)],
                 startPoint: .top,
                 endPoint: .bottom
             )
             Image(decorative: AlloyGrain.tile, scale: 2)
                 .resizable(resizingMode: .tile)
-                .opacity(isDark ? 0.55 : 0.8)
+                .opacity(isDark ? 0.45 : 0.8)
             // A soft, broad sheen, as on a satin-finished casting.
             RadialGradient(
-                colors: [.white.opacity(isDark ? 0.05 : 0.22), .white.opacity(0)],
+                colors: [.white.opacity(isDark ? 0.04 : 0.22), .white.opacity(0)],
                 center: UnitPoint(x: 0.3, y: 0),
                 startRadius: 0,
                 endRadius: 520

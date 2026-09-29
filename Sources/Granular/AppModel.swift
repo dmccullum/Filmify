@@ -56,7 +56,15 @@ struct ProcessingJob: Identifiable {
 @MainActor
 @Observable
 final class AppModel {
-    var operationMode: OperationMode = .drop
+    var operationMode: OperationMode = .drop {
+        didSet {
+            // Cover the window with the bare body in the same update as the
+            // switch, so the new mode never shows at the old window size.
+            if operationMode != oldValue {
+                isSettlingWindow = true
+            }
+        }
+    }
     var recipe: FilmRecipe = .classic35
     var selectedRecipeID = FilmRecipe.classic35.id
     var savedRecipes: [FilmRecipe] = []
@@ -64,9 +72,9 @@ final class AppModel {
     var showOriginal = false
     var activeCenterTarget: EffectCenterTarget?
     var isDropTargeted = false
-    /// True while the window shrinks into Instant mode, so the film chamber
-    /// only appears once the window has reached its final size.
-    var isSettlingInstantWindow = false
+    /// True while the window resizes between modes; the content waits under a
+    /// plain alloy plate until the window has reached its final size.
+    var isSettlingWindow = false
     var outputOptions = OutputOptions()
 
     var dropOutputFolder: URL?
@@ -183,9 +191,6 @@ final class AppModel {
         if operationMode == .drop, jobs.isEmpty {
             statusMessage = "Ready"
         }
-        if operationMode == .drop {
-            isSettlingInstantWindow = true
-        }
         scheduleWindowResize(for: operationMode, animated: true)
     }
 
@@ -197,9 +202,7 @@ final class AppModel {
             }
             guard !Task.isCancelled, let self, self.operationMode == mode else { return }
             self.resizeWindow(for: mode, animated: animated)
-            if mode == .drop {
-                self.isSettlingInstantWindow = false
-            }
+            self.isSettlingWindow = false
         }
     }
 

@@ -12,25 +12,26 @@ struct ContentView: View {
         ZStack {
             switch model.operationMode {
             case .drop:
-                Group {
-                    if model.isSettlingInstantWindow {
-                        // The bare camera body while the window shrinks to size.
-                        AlloySurface().ignoresSafeArea()
-                    } else {
-                        DropModeView()
-                    }
-                }
-                .transition(modeContentTransition)
+                DropModeView()
+                    .transition(modeContentTransition)
             case .edit:
                 EditModeView()
                     .transition(modeContentTransition)
             }
+
+            if model.isSettlingWindow {
+                // A solid alloy plate covers the window while it resizes, then
+                // fades away to reveal the new mode at its final size.
+                AlloySurface()
+                    .ignoresSafeArea()
+                    .transition(.asymmetric(insertion: .identity, removal: .opacity))
+            }
         }
         .animation(modeContentAnimation, value: model.operationMode)
-        .animation(.easeOut(duration: 0.22), value: model.isSettlingInstantWindow)
+        .animation(.easeOut(duration: 0.25), value: model.isSettlingWindow)
         .frame(minWidth: 620, minHeight: 340)
         .overlay(alignment: .topTrailing) {
-            if model.operationMode == .edit {
+            if model.operationMode == .edit, !model.isSettlingWindow {
                 Rectangle()
                     .fill(Color(nsColor: .separatorColor))
                     .frame(width: 1)
@@ -39,7 +40,7 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
-        .toolbarBackgroundVisibility(model.operationMode == .drop ? .hidden : .automatic, for: .windowToolbar)
+        .toolbarBackgroundVisibility(model.operationMode == .drop || model.isSettlingWindow ? .hidden : .automatic, for: .windowToolbar)
         .toolbar(removing: model.operationMode == .drop ? .title : nil)
         .toolbar {
             if model.operationMode == .drop {
