@@ -77,7 +77,7 @@ struct GranularDesktopApp: App {
                 Divider()
 
                 Button("Save New Recipe…") {
-                    model.saveCurrentAsRecipe()
+                    model.beginSavingRecipe()
                 }
                 .disabled(model.operationMode != .edit)
 

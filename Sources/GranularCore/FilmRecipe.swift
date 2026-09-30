@@ -386,6 +386,9 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
     public var halation: HalationSettings
     public var landscapeGlow: LandscapeGlowSettings
     public var grain: GrainSettings
+    /// The canister design a saved recipe is packaged in, by identifier; nil
+    /// lets the app choose one for it.
+    public var canister: String?
 
     public init(
         id: String,
@@ -396,7 +399,8 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
         diffusion: DiffusionSettings,
         halation: HalationSettings,
         landscapeGlow: LandscapeGlowSettings = .init(),
-        grain: GrainSettings
+        grain: GrainSettings,
+        canister: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -407,6 +411,7 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
         self.halation = halation
         self.landscapeGlow = landscapeGlow
         self.grain = grain
+        self.canister = canister
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -419,6 +424,7 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
         case halation
         case landscapeGlow
         case grain
+        case canister
     }
 
     public init(from decoder: Decoder) throws {
@@ -435,6 +441,7 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
             forKey: .landscapeGlow
         ) ?? .init()
         grain = try container.decode(GrainSettings.self, forKey: .grain)
+        canister = try container.decodeIfPresent(String.self, forKey: .canister)
     }
 
 }

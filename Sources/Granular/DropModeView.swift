@@ -664,7 +664,7 @@ private struct FilmStrip: View {
 }
 
 private struct FilmRebate: View {
-    static let edgePrintHeight: CGFloat = 10
+    nonisolated static let edgePrintHeight: CGFloat = 10
 
     let width: CGFloat
     let height: CGFloat

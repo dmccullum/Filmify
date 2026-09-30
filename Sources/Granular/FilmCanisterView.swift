@@ -2,12 +2,14 @@ import GranularCore
 import SwiftUI
 
 /// How a recipe's film is packaged: each built-in recipe gets its own canister,
-/// and saved or modified recipes are bulk-loaded with a hand-written tape label.
+/// saved recipes come in a design from the canister library, and unsaved edits
+/// are bulk-loaded with a hand-written tape label.
 enum CanisterStyle: Hashable {
     case classic
     case extra
     case clean
     case soft
+    case printed(CanisterDesign, detail: String)
     case bulk(String)
 
     init(recipe: FilmRecipe, isModified: Bool) {
@@ -20,8 +22,18 @@ enum CanisterStyle: Hashable {
         case "extra-35": self = .extra
         case "clean-120": self = .clean
         case "soft-16": self = .soft
-        default: self = .bulk(recipe.name)
+        default: self.init(design: CanisterDesign.resolved(for: recipe), recipe: recipe)
         }
+    }
+
+    init(design: CanisterDesign, recipe: FilmRecipe) {
+        guard design.layout != .tape else {
+            self = .bulk(recipe.name)
+            return
+        }
+        // The small print names the stock the recipe is built on, if any.
+        let stock = recipe.tone.isEnabled && recipe.tone.stock != .none ? recipe.tone.stock.name.uppercased() : nil
+        self = .printed(design, detail: stock ?? "35 · 36 EXP")
     }
 
     /// Every recipe is loaded the same way; only the printing differs.
@@ -99,6 +111,8 @@ struct FilmCanisterView: View {
                     label(panel: teal, panelText: paleTeal,
                           face: paleTeal, name: teal, detail: Color(hex: 0x3F5A52), detailText: "16 · SOFT GLOW")
                 }
+            case .printed(let design, let detail):
+                tin(steelCaps: design.steelCaps) { printedLabel(design.layout, detail: detail) }
             case .bulk(let tape):
                 tin(steelCaps: true) { bulkLabel(tape) }
             }
@@ -116,10 +130,12 @@ struct FilmCanisterView: View {
     private func label(
         panel: Color, panelText: Color,
         face: Color, name: Color, detail: Color, detailText: String,
-        hazard: Bool = false
+        hazard: Bool = false, fullName: Bool = false
     ) -> some View {
-        let word = (recipeName.split(separator: " ").first.map(String.init) ?? recipeName).uppercased()
-        let nameSize = min(36, 214 / (CGFloat(max(word.count, 3)) * 0.52))
+        let word = fullName
+            ? printedName
+            : (recipeName.split(separator: " ").first.map(String.init) ?? recipeName).uppercased()
+        let nameSize = fittedSize(word, length: 214, maximum: 36)
         return HStack(spacing: 0) {
             ZStack(alignment: .bottomTrailing) {
                 panel
@@ -180,6 +196,182 @@ struct FilmCanisterView: View {
                 .foregroundStyle(Color(hex: 0x9AA0A4))
                 .padding(.bottom, 12 * s)
             }
+        }
+    }
+
+    // MARK: Library labels
+
+    @ViewBuilder
+    private func printedLabel(_ layout: CanisterDesign.Layout, detail: String) -> some View {
+        switch layout {
+        case let .split(panel, panelText, face, name, detailColor):
+            label(panel: Color(hex: panel), panelText: Color(hex: panelText),
+                  face: Color(hex: face), name: Color(hex: name), detail: Color(hex: detailColor),
+                  detailText: detail, fullName: true)
+        case let .bands(face, band, accent, name, detailColor):
+            bandsLabel(face: Color(hex: face), band: Color(hex: band), accent: Color(hex: accent),
+                       name: Color(hex: name), detail: Color(hex: detailColor), detailText: detail)
+        case let .sash(face, stripe, edge, name, detailColor):
+            sashLabel(face: Color(hex: face), stripe: Color(hex: stripe), edge: Color(hex: edge),
+                      name: Color(hex: name), detail: Color(hex: detailColor), detailText: detail)
+        case let .stripes(face, stripes, name, detailColor):
+            stripesLabel(face: Color(hex: face), stripes: stripes.map { Color(hex: $0) },
+                         name: Color(hex: name), detail: Color(hex: detailColor), detailText: detail)
+        case let .paper(tin, paper, ink, rule):
+            paperLabel(tin: Color(hex: tin), paper: Color(hex: paper), ink: Color(hex: ink),
+                       rule: Color(hex: rule), detailText: detail)
+        case .tape:
+            bulkLabel(recipeName)
+        }
+    }
+
+    /// A plain face between a heavy maker's band at the top and a thin one at
+    /// the foot, with the name running up the middle.
+    private func bandsLabel(face: Color, band: Color, accent: Color, name: Color, detail: Color, detailText: String) -> some View {
+        VStack(spacing: 0) {
+            ZStack {
+                band
+                Text("GRANULAR")
+                    .font(.system(size: 10 * s, weight: .bold).width(.condensed))
+                    .tracking(3 * s)
+                    .foregroundStyle(face)
+            }
+            .frame(height: 38 * s)
+            accent.frame(height: 5 * s).padding(.top, 4 * s)
+
+            HStack(alignment: .bottom, spacing: 4 * s) {
+                vertical(printedName, size: fittedSize(printedName, length: 150, maximum: 34),
+                         weight: .semibold, color: name, tracking: 0.5)
+                vertical(detailText, size: 9, weight: .bold, color: detail, tracking: 1.6)
+                    .padding(.bottom, 2 * s)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .padding(.leading, 18 * s)
+            .padding(.bottom, 10 * s)
+
+            accent.frame(height: 2 * s).padding(.bottom, 3 * s)
+            ZStack {
+                band
+                chevron.foregroundStyle(face.opacity(0.9))
+            }
+            .frame(height: 20 * s)
+            .padding(.bottom, 12 * s)
+        }
+        .background(face)
+    }
+
+    /// A diagonal sash across the shoulder, dropping toward the lip, with the
+    /// name running up from the foot beneath it.
+    private func sashLabel(face: Color, stripe: Color, edge: Color, name: Color, detail: Color, detailText: String) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            face
+            Canvas { context, size in
+                let unit = size.height / CanisterGeometry.bodyHeight
+                let rise = size.height * 0.30
+                func sash(top: CGFloat, thickness: CGFloat) -> Path {
+                    var path = Path()
+                    path.move(to: CGPoint(x: 0, y: top))
+                    path.addLine(to: CGPoint(x: size.width, y: top + rise))
+                    path.addLine(to: CGPoint(x: size.width, y: top + rise + thickness))
+                    path.addLine(to: CGPoint(x: 0, y: top + thickness))
+                    path.closeSubpath()
+                    return path
+                }
+                context.fill(sash(top: 6 * unit, thickness: 4 * unit), with: .color(edge))
+                context.fill(sash(top: 14 * unit, thickness: 40 * unit), with: .color(stripe))
+                context.fill(sash(top: 58 * unit, thickness: 2 * unit), with: .color(edge))
+            }
+            HStack(alignment: .bottom, spacing: 3 * s) {
+                vertical(printedName, size: fittedSize(printedName, length: 150, maximum: 34),
+                         weight: .semibold, color: name, tracking: 0.5)
+                vertical(detailText, size: 9, weight: .bold, color: detail, tracking: 1.6)
+                    .padding(.bottom, 2 * s)
+                Spacer(minLength: 0)
+                vertical("GRANULAR", size: 8.5, weight: .bold, color: detail, tracking: 2.4)
+                    .padding(.trailing, 6 * s)
+            }
+            .padding(.leading, 12 * s)
+            .padding(.bottom, 26 * s)
+            chevron
+                .foregroundStyle(detail.opacity(0.8))
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 9 * s)
+        }
+    }
+
+    /// Thin stripes stacked across the shoulder, under the maker's name, with
+    /// the recipe name running up from the foot.
+    private func stripesLabel(face: Color, stripes: [Color], name: Color, detail: Color, detailText: String) -> some View {
+        VStack(spacing: 0) {
+            Text("GRANULAR")
+                .font(.system(size: 10 * s, weight: .heavy).width(.condensed))
+                .tracking(3 * s)
+                .foregroundStyle(detail)
+                .padding(.top, 14 * s)
+                .padding(.bottom, 8 * s)
+            VStack(spacing: 0) {
+                ForEach(stripes.indices, id: \.self) { index in
+                    stripes[index].frame(height: 9 * s)
+                }
+            }
+
+            HStack(alignment: .bottom, spacing: 4 * s) {
+                vertical(printedName, size: fittedSize(printedName, length: 140, maximum: 32),
+                         weight: .semibold, color: name, tracking: 0.5)
+                vertical(detailText, size: 9, weight: .bold, color: detail, tracking: 1.6)
+                    .padding(.bottom, 2 * s)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .padding(.leading, 18 * s)
+            .padding(.bottom, 26 * s)
+            .overlay(alignment: .bottom) {
+                chevron
+                    .foregroundStyle(detail.opacity(0.8))
+                    .padding(.bottom, 9 * s)
+            }
+        }
+        .background(face)
+    }
+
+    /// A ruled paper label glued onto a bare tin, with the name typed up it.
+    private func paperLabel(tin: Color, paper: Color, ink: Color, rule: Color, detailText: String) -> some View {
+        let typewriter = "American Typewriter"
+        return ZStack {
+            tin
+            VStack(spacing: 0) {
+                Text("GRANULAR · 35MM")
+                    .font(.custom(typewriter, size: 8.5 * s).weight(.semibold))
+                    .tracking(1.2 * s)
+                    .foregroundStyle(ink)
+                    .padding(.top, 10 * s)
+                rule.frame(height: 1.5 * s).padding(.horizontal, 8 * s).padding(.top, 5 * s)
+
+                HStack(alignment: .bottom, spacing: 4 * s) {
+                    vertical(printedName, size: fittedSize(printedName, length: 140, maximum: 26),
+                             weight: .regular, color: ink, tracking: 0, fontName: typewriter)
+                    vertical(detailText, size: 8.5, weight: .regular, color: ink.opacity(0.75), tracking: 1, fontName: typewriter)
+                        .padding(.bottom, 2 * s)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.leading, 14 * s)
+                .padding(.bottom, 10 * s)
+                .background {
+                    // Faint ruled lines, like a stock-room ledger card.
+                    Canvas { context, size in
+                        var y: CGFloat = 12 * s
+                        while y < size.height {
+                            context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: max(0.5, 0.75 * s))),
+                                         with: .color(ink.opacity(0.12)))
+                            y += 14 * s
+                        }
+                    }
+                }
+            }
+            .frame(width: 112 * s, height: 196 * s)
+            .background(paper)
+            .shadow(color: .black.opacity(0.35), radius: 1.5 * s, y: 1 * s)
+            .rotationEffect(.degrees(-1.2))
+            .offset(y: -6 * s)
         }
     }
 
@@ -245,10 +437,26 @@ struct FilmCanisterView: View {
         )
     }
 
-    private func vertical(_ text: String, size: CGFloat, weight: Font.Weight, color: Color, tracking: CGFloat) -> some View {
+    /// The whole recipe name for a tin that carries it, shortened if it would
+    /// have to be printed too small to read.
+    private var printedName: String {
+        let name = recipeName.uppercased()
+        return name.count > 24 ? String(name.prefix(23)) + "…" : name
+    }
+
+    /// The largest condensed type size at which the text fits the given length.
+    private func fittedSize(_ text: String, length: CGFloat, maximum: CGFloat) -> CGFloat {
+        min(maximum, length / (CGFloat(max(text.count, 3)) * 0.52))
+    }
+
+    private func vertical(
+        _ text: String, size: CGFloat, weight: Font.Weight, color: Color, tracking: CGFloat,
+        fontName: String? = nil
+    ) -> some View {
         VerticalLabel {
             Text(text)
-                .font(.system(size: size * s, weight: weight).width(.condensed))
+                .font(fontName.map { .custom($0, size: size * s).weight(weight) }
+                      ?? .system(size: size * s, weight: weight).width(.condensed))
                 .tracking(tracking * s)
                 .foregroundStyle(color)
                 .fixedSize()
@@ -256,9 +464,13 @@ struct FilmCanisterView: View {
         }
     }
 
+    /// Left off icon-sized canisters, where symbols stop scaling down with the tin.
+    @ViewBuilder
     private var chevron: some View {
-        Image(systemName: "chevron.down")
-            .font(.system(size: 9 * s, weight: .heavy))
+        if height >= 60 {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9 * s, weight: .heavy))
+        }
     }
 }
 
@@ -277,3 +489,4 @@ private struct TapeShape: Shape {
         return path
     }
 }
+

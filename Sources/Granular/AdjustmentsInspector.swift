@@ -9,10 +9,13 @@ struct AdjustmentsInspector: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
+                HStack(spacing: 8) {
+                    // The title keeps its line; a long recipe name gives way instead.
                     Text("Adjustments")
                         .font(.title2.weight(.semibold))
-                    Spacer()
+                        .lineLimit(1)
+                        .fixedSize()
+                    Spacer(minLength: 0)
                     RecipeMenu()
                 }
 
