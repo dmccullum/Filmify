@@ -160,11 +160,7 @@ private struct OutputSettings: View {
             }
 
             Section("Files") {
-                SettingsFolderRow(title: "Instant folder", url: model.dropOutputFolder) {
-                    model.chooseDropOutputFolder()
-                } reveal: {
-                    model.revealDropOutputFolder()
-                }
+                InstantFolderRow()
 
                 LabeledContent("Filename") {
                     HStack(spacing: 6) {
@@ -272,6 +268,84 @@ private struct AutomationSettings: View {
                 .foregroundStyle(model.watchErrorMessage == nil ? Color.secondary : Color.orange)
             }
         }
+    }
+}
+
+/// Where Instant saves: a folder, or Ask Each Time. A folder stays remembered
+/// while Ask Each Time is on, so it can be picked again from the list.
+private struct InstantFolderRow: View {
+    @Environment(AppModel.self) private var model
+    @State private var recents: [URL] = []
+
+    private enum Choice: Hashable {
+        case ask
+        case folder(String)
+        case none
+    }
+
+    private var choice: Binding<Choice> {
+        Binding {
+            if model.asksWhereToSaveInstantly { return .ask }
+            return model.dropOutputFolder.map { .folder($0.standardizedFileURL.path) } ?? .none
+        } set: { newValue in
+            switch newValue {
+            case .ask:
+                model.askWhereToSaveEachTime()
+            case .folder(let path):
+                if let folder = recents.first(where: { $0.standardizedFileURL.path == path }) {
+                    model.useRecentDropOutputFolder(folder)
+                }
+            case .none:
+                break
+            }
+            recents = model.recentOutputFolders()
+        }
+    }
+
+    var body: some View {
+        LabeledContent("Instant folder") {
+            HStack(spacing: 8) {
+                Picker("Instant folder", selection: choice) {
+                    Label("Ask Each Time", systemImage: OutputFolderMenu.askSymbol)
+                        .tag(Choice.ask)
+                    if model.dropOutputFolder == nil, !model.asksWhereToSaveInstantly {
+                        Text("Not selected").tag(Choice.none)
+                    }
+                    if !recents.isEmpty {
+                        Divider()
+                    }
+                    ForEach(recents, id: \.self) { folder in
+                        Label {
+                            Text(folder.lastPathComponent)
+                        } icon: {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: folder.path(percentEncoded: false)))
+                        }
+                        .tag(Choice.folder(folder.standardizedFileURL.path))
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .help(model.asksWhereToSaveInstantly
+                    ? "Instant asks where to save each time"
+                    : model.dropOutputFolder.map { ($0.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath }
+                        ?? "Choose where processed images are saved")
+
+                Button("Choose…") {
+                    model.chooseDropOutputFolder()
+                    recents = model.recentOutputFolders()
+                }
+                Button {
+                    model.revealDropOutputFolder()
+                } label: {
+                    Image(systemName: "arrow.right.circle.fill")
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.dropOutputFolder == nil || model.asksWhereToSaveInstantly)
+                .help("Show in Finder")
+                .accessibilityLabel("Show Instant folder in Finder")
+            }
+        }
+        .onAppear { recents = model.recentOutputFolders() }
     }
 }
 

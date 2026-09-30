@@ -38,30 +38,44 @@ extension AppModel {
             return []
         }
 
-        if dropOutputFolder == nil, destinationOverride == nil {
-            chooseDropOutputFolder()
-        }
-        guard let destination = destinationOverride ?? dropOutputFolder else {
-            statusMessage = "Choose an output folder to continue"
-            return []
-        }
-        guard Self.isExistingDirectory(destination) else {
-            let message = destinationOverride == nil
-                ? "Instant output folder is no longer available. Choose it again."
-                : "Finished folder is no longer available. Choose it again."
-            statusMessage = message
-            if destinationOverride != nil {
-                watchErrorMessage = message
-                watchStatusMessage = message
+        // Ask Each Time develops into a temporary folder first; the Save panel
+        // comes once the last frame has wound on.
+        let asksWhereToSave = destinationOverride == nil && asksWhereToSaveInstantly
+        let destination: URL
+        if asksWhereToSave {
+            do {
+                destination = try UnsavedOutputs.makeFolder()
+            } catch {
+                statusMessage = "Couldn’t prepare a place to develop the images: \(error.localizedDescription)"
+                return []
             }
-            return []
+        } else {
+            if dropOutputFolder == nil, destinationOverride == nil {
+                chooseDropOutputFolder()
+            }
+            guard let chosen = destinationOverride ?? dropOutputFolder else {
+                statusMessage = "Choose an output folder to continue"
+                return []
+            }
+            guard Self.isExistingDirectory(chosen) else {
+                let message = destinationOverride == nil
+                    ? "Instant output folder is no longer available. Choose it again."
+                    : "Finished folder is no longer available. Choose it again."
+                statusMessage = message
+                if destinationOverride != nil {
+                    watchErrorMessage = message
+                    watchStatusMessage = message
+                }
+                return []
+            }
+            destination = chosen
         }
         guard let processingService else {
             statusMessage = startupError ?? "The image engine is unavailable"
             return []
         }
 
-        let batchID = beginBatch(of: supported.count, isWatched: destinationOverride != nil)
+        let batchID = beginBatch(of: supported.count, isWatched: destinationOverride != nil, asksWhereToSave: asksWhereToSave)
         defer { endBatchRun(batchID) }
 
         var completed: Set<URL> = []
@@ -93,6 +107,10 @@ extension AppModel {
                 updateJob(id, state: .finished(output))
                 statusMessage = "Finished \(url.lastPathComponent)"
                 completed.insert(url)
+                if asksWhereToSave {
+                    unsavedJobIDs.insert(id)
+                    jobsAwaitingSavePrompt.append(id)
+                }
                 recordBatchResult(batchID, output: output)
                 if destinationOverride != nil {
                     watchErrorMessage = nil
@@ -118,7 +136,12 @@ extension AppModel {
     }
 
     func revealLastOutput() {
-        reveal(lastFinishedURL)
+        // A frame still waiting to be saved has nothing worth revealing yet.
+        let saved = jobs.lazy.compactMap { job -> URL? in
+            guard case .finished(let url) = job.state, !self.unsavedJobIDs.contains(job.id) else { return nil }
+            return url
+        }
+        reveal(saved.first)
     }
 
     func updateJob(_ id: UUID, state: JobState) {
@@ -174,6 +197,11 @@ extension AppModel {
     func moveOutputToTrash(of id: UUID) {
         guard let index = jobs.firstIndex(where: { $0.id == id }),
               case .finished(let output) = jobs[index].state else { return }
+        // An unsaved frame only exists in the temporary folder: discarding it is final.
+        if unsavedJobIDs.contains(id) {
+            discardUnsaved(id)
+            return
+        }
         do {
             try FileManager.default.trashItem(at: output, resultingItemURL: nil)
             jobs.remove(at: index)
@@ -200,6 +228,7 @@ extension AppModel {
     func useDropOutputFolder(_ url: URL) {
         let previous = dropOutputFolder
         guard setFolder(url, key: BookmarkKey.dropOutput, assignment: { dropOutputFolder = $0 }) else { return }
+        asksWhereToSaveInstantly = false
         if let previous {
             rememberRecentDropOutputFolder(previous)
         }

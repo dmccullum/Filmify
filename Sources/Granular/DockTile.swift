@@ -5,21 +5,31 @@ import AppKit
 enum DockTile {
     private static var progressView: DockProgressView?
 
+    /// The last fraction drawn, in hundredths: the bar is under a hundred
+    /// points wide, so a finer change wouldn’t show, and every redraw of the
+    /// tile is a trip to the Dock.
+    private static var drawnHundredths = -1
+
     static func showProgress(_ fraction: Double) {
+        let clamped = min(1, max(0, fraction))
+        let hundredths = Int((clamped * 100).rounded())
         let tile = NSApp.dockTile
+        if progressView != nil, hundredths == drawnHundredths, tile.contentView === progressView { return }
         let view = progressView ?? DockProgressView()
         view.frame = NSRect(origin: .zero, size: tile.size)
-        view.fraction = min(1, max(0, fraction))
+        view.fraction = clamped
         if tile.contentView !== view {
             tile.contentView = view
             progressView = view
         }
+        drawnHundredths = hundredths
         tile.display()
     }
 
     static func hideProgress() {
         guard progressView != nil else { return }
         progressView = nil
+        drawnHundredths = -1
         NSApp.dockTile.contentView = nil
         NSApp.dockTile.display()
     }

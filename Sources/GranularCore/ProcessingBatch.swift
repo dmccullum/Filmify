@@ -74,3 +74,27 @@ public enum RecentFolders {
         return Array(([folder] + others).prefix(max(1, limit)))
     }
 }
+
+/// Where processed images land when they are moved into a folder chosen after
+/// the fact, as with Instant’s Ask Each Time.
+public enum SaveDestination {
+    /// `fileName` in `folder`, or with " 2", " 3" and so on added to its name
+    /// if that is taken, so saving never replaces a file without being asked.
+    public static func availableURL(
+        for fileName: String,
+        in folder: URL,
+        exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> URL {
+        let candidate = folder.appendingPathComponent(fileName)
+        guard exists(candidate) else { return candidate }
+        let base = candidate.deletingPathExtension().lastPathComponent
+        let fileExtension = candidate.pathExtension
+        var suffix = 2
+        while true {
+            let name = fileExtension.isEmpty ? "\(base) \(suffix)" : "\(base) \(suffix).\(fileExtension)"
+            let next = folder.appendingPathComponent(name)
+            if !exists(next) { return next }
+            suffix += 1
+        }
+    }
+}

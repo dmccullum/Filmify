@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// File menu: Quick Look for the marked frame, and stopping a batch.
+/// File menu: Quick Look for the marked frame, stopping a batch, and saving
+/// frames that are waiting on Ask Each Time.
 struct InstantCommands: Commands {
     let model: AppModel
     private var roll: FilmRoll { .shared }
@@ -22,6 +23,12 @@ struct InstantCommands: Commands {
                 }
                 .keyboardShortcut(".")
                 .disabled(!model.canCancelProcessing)
+
+                // Frames developed under Ask Each Time that haven’t been saved yet.
+                Button("Save Unsaved Images…") {
+                    model.saveAllUnsaved()
+                }
+                .disabled(model.unsavedJobIDs.isEmpty)
             }
         }
     }

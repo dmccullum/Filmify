@@ -21,8 +21,8 @@ struct MenuAnchorView: NSViewRepresentable {
     }
 }
 
-/// The Instant output folder’s pop-up menu: the current folder and recent
-/// ones, each with its Finder icon, then Choose… and Show in Finder.
+/// The Instant output folder’s pop-up menu: Ask Each Time, the current folder
+/// and recent ones, each with its Finder icon, then Choose… and Show in Finder.
 @MainActor
 final class OutputFolderMenu: NSObject {
     private let model: AppModel
@@ -51,7 +51,18 @@ final class OutputFolderMenu: NSObject {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        let current = model.dropOutputFolder?.standardizedFileURL.path
+        let asks = model.asksWhereToSaveInstantly
+        let ask = NSMenuItem(title: "Ask Each Time", action: #selector(askEachTime), keyEquivalent: "")
+        ask.target = self
+        ask.image = NSImage(systemSymbolName: Self.askSymbol, accessibilityDescription: nil)
+        ask.state = asks ? .on : .off
+        ask.toolTip = "Choose where to save after the images are processed"
+        menu.addItem(ask)
+        menu.addItem(.separator())
+
+        // The remembered folder stays in the list while Ask Each Time is on,
+        // ready to switch back to.
+        let current = asks ? nil : model.dropOutputFolder?.standardizedFileURL.path
         let folders = model.recentOutputFolders()
         for folder in folders {
             let item = NSMenuItem(
@@ -76,15 +87,22 @@ final class OutputFolderMenu: NSObject {
 
         let show = NSMenuItem(title: "Show in Finder", action: #selector(showInFinder), keyEquivalent: "")
         show.target = self
-        show.isEnabled = model.dropOutputFolder != nil
+        show.isEnabled = model.dropOutputFolder != nil && !asks
         menu.addItem(show)
         return menu
     }
+
+    /// The glyph for Ask Each Time in the menu, the footer and Settings.
+    static let askSymbol = "folder.badge.questionmark"
 
     private func icon(for folder: URL) -> NSImage {
         let icon = NSWorkspace.shared.icon(forFile: folder.path)
         icon.size = NSSize(width: 16, height: 16)
         return icon
+    }
+
+    @objc private func askEachTime() {
+        model.askWhereToSaveEachTime()
     }
 
     @objc private func chooseRecent(_ item: NSMenuItem) {
