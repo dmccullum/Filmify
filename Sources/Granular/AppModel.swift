@@ -180,6 +180,17 @@ final class AppModel {
 
     // MARK: Instant processing state
     // Keep each area's new stored state under its own mark.
+    /// The drop batch being processed, for the “3 of 12” counter and Cancel Processing.
+    var instantBatch: ActiveBatch?
+    /// The burst of arrivals a watched folder is working through.
+    var watchBurst: ActiveBatch?
+    /// Images finished while Granular was in the background, badged on the Dock icon.
+    var backgroundFinishedCount = 0
+    /// Where a watched-folder job was written, so Retry sends it back there.
+    @ObservationIgnored var jobDestinationOverrides: [UUID: URL] = [:]
+    /// Recent Instant output folders, most recent first; read on first use.
+    var recentDropOutputFolders: [URL]?
+    @ObservationIgnored var activationObserver: (any NSObjectProtocol)?
 
     // MARK: Recipe library state
     // Keep each area's new stored state under its own mark.

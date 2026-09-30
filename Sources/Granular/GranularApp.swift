@@ -10,6 +10,10 @@ extension Notification.Name {
 
 @MainActor
 final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        ProcessingNotifier.shared.becomeDelegate()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         TransferFiles.removeAll()
     }
@@ -76,6 +80,7 @@ struct GranularDesktopApp: App {
 
             FileCommands(model: model)
             RecipeCommands(model: model)
+            InstantCommands(model: model)
             HelpCommands()
         }
 

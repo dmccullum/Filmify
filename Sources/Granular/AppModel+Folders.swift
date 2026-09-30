@@ -103,11 +103,6 @@ extension AppModel {
         startWatching()
     }
 
-    func revealDropOutputFolder() {
-        guard let dropOutputFolder else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([dropOutputFolder])
-    }
-
     /// Returns a message if macOS refused, so Settings can show it.
     @discardableResult
     func setLaunchAtLogin(_ enabled: Bool) -> String? {
