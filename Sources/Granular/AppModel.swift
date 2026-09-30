@@ -101,7 +101,6 @@ final class AppModel {
     /// True while the window resizes between modes. The camera body stays up
     /// with the film unloaded until the window has reached its final size.
     var isSettlingWindow = false
-    var outputOptions = OutputOptions()
 
     var dropOutputFolder: URL?
     var watchedInputFolder: URL?
@@ -133,6 +132,20 @@ final class AppModel {
 
     // MARK: Settings & window state
     // Keep each area's new stored state under its own mark.
+    var outputOptions = OutputOptions() {
+        didSet { if outputOptions != oldValue { saveOutputOptions() } }
+    }
+    var opensInLastUsedMode = true {
+        didSet { UserDefaults.standard.set(opensInLastUsedMode, forKey: SettingsKey.opensInLastUsedMode) }
+    }
+    var menuBarVisibility: MenuBarVisibility = .whileWatching {
+        didSet { UserDefaults.standard.set(menuBarVisibility.rawValue, forKey: SettingsKey.menuBarVisibility) }
+    }
+    /// Where the window sat in each mode the last time the user left it there.
+    @ObservationIgnored var savedWindowFrames: [OperationMode: CGRect] = [:]
+    @ObservationIgnored weak var observedWindow: NSWindow?
+    @ObservationIgnored var windowFrameObservers: [NSObjectProtocol] = []
+    @ObservationIgnored var windowFrameSaveTask: Task<Void, Never>?
 
     // MARK: Undo state
     // Keep each area's new stored state under its own mark.
@@ -153,6 +166,7 @@ final class AppModel {
     // Keep each area's new stored state under its own mark.
 
     init() {
+        restoreSettings()
         do {
             processingService = try ImageProcessingService()
         } catch {
@@ -164,6 +178,7 @@ final class AppModel {
         restoreFolder(forKey: BookmarkKey.dropOutput) { dropOutputFolder = $0 }
         restoreFolder(forKey: BookmarkKey.watchInput) { watchedInputFolder = $0 }
         restoreFolder(forKey: BookmarkKey.watchOutput) { watchedOutputFolder = $0 }
+        resumeWatchingIfNeeded()
     }
 
     var previewImage: NSImage? {
