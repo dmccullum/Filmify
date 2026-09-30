@@ -26,45 +26,32 @@ struct CanisterDesign: Identifiable, Hashable {
     static let tape = CanisterDesign(id: "tape", name: "Bulk Load", layout: .tape, steelCaps: true)
 
     static let library: [CanisterDesign] = [
+        // Ordered so tins that look alike sit together. Some nod to the
+        // classics, without anyone's trade dress.
         CanisterDesign(
             id: "ember", name: "Ember",
             layout: .split(panel: 0xB3261E, panelText: 0xF2EDE4, face: 0xEEE8DA, name: 0xB3261E, detail: 0x141414),
             steelCaps: false
         ),
         CanisterDesign(
-            id: "lagoon", name: "Lagoon",
-            layout: .split(panel: 0x0E7C86, panelText: 0x141414, face: 0x141414, name: 0x6FD3CC, detail: 0xF2EDE4),
+            id: "goldhour", name: "Gold Hour",
+            layout: .split(panel: 0xC8102E, panelText: 0xF6B800, face: 0xF6B800, name: 0xC8102E, detail: 0x141414),
             steelCaps: false
         ),
         CanisterDesign(
-            id: "plum", name: "Plum",
-            layout: .split(panel: 0x5B2A6E, panelText: 0xF1E4EF, face: 0xF1E4EF, name: 0x5B2A6E, detail: 0x3A2A40),
+            id: "saturate", name: "Saturate",
+            layout: .sash(face: 0xF6B800, stripe: 0xD52B1E, edge: 0x141414, name: 0x141414, detail: 0xD52B1E),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "slideshow", name: "Slide Show",
+            layout: .stripes(face: 0xF6B800, stripes: [0xE0453A, 0xC8102E, 0x141414], name: 0x141414, detail: 0xC8102E),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "pushed", name: "Pushed",
+            layout: .split(panel: 0x141414, panelText: 0xF6B800, face: 0xF6B800, name: 0x141414, detail: 0xC8102E),
             steelCaps: true
-        ),
-        CanisterDesign(
-            id: "olive", name: "Olive",
-            layout: .split(panel: 0x6B7A2A, panelText: 0xEFE9D2, face: 0xEFE9D2, name: 0x4F5A1E, detail: 0x2E3412),
-            steelCaps: true
-        ),
-        CanisterDesign(
-            id: "sunset", name: "Sunset",
-            layout: .bands(face: 0xF4E9D8, band: 0xE8732C, accent: 0xC0392B, name: 0x141414, detail: 0x7A3A1E),
-            steelCaps: false
-        ),
-        CanisterDesign(
-            id: "nightshift", name: "Night Shift",
-            layout: .bands(face: 0x16213E, band: 0xE94F37, accent: 0xF2C14E, name: 0xF4F1EA, detail: 0xF2C14E),
-            steelCaps: false
-        ),
-        CanisterDesign(
-            id: "mint", name: "Mint",
-            layout: .bands(face: 0xDDEFE3, band: 0x2E8B6E, accent: 0x141414, name: 0x1E5C49, detail: 0x2E8B6E),
-            steelCaps: true
-        ),
-        CanisterDesign(
-            id: "chroma", name: "Chroma",
-            layout: .sash(face: 0xF5F4F0, stripe: 0xD6246E, edge: 0x141414, name: 0x141414, detail: 0xD6246E),
-            steelCaps: false
         ),
         CanisterDesign(
             id: "citrus", name: "Citrus",
@@ -72,8 +59,13 @@ struct CanisterDesign: Identifiable, Hashable {
             steelCaps: false
         ),
         CanisterDesign(
-            id: "glacier", name: "Glacier",
-            layout: .sash(face: 0xE9F1F7, stripe: 0x3B82C4, edge: 0x1B3F66, name: 0x1B3F66, detail: 0x3B82C4),
+            id: "sunbleached", name: "Sun-Bleached",
+            layout: .split(panel: 0xE3CD84, panelText: 0x3A3631, face: 0x3A3631, name: 0xE3CD84, detail: 0xCFC6B4),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "portrait", name: "Portrait",
+            layout: .bands(face: 0xF7F3EA, band: 0xD9A21B, accent: 0x7A5A2A, name: 0x3A2A17, detail: 0xB07A12),
             steelCaps: true
         ),
         CanisterDesign(
@@ -82,14 +74,13 @@ struct CanisterDesign: Identifiable, Hashable {
             steelCaps: true
         ),
         CanisterDesign(
-            id: "ledger", name: "Ledger",
-            layout: .paper(tin: 0x111113, paper: 0xF3EEE1, ink: 0x1D2A4A, rule: 0xC0392B),
-            steelCaps: false
-        ),
-        // Nods to the classics, without anyone's trade dress.
-        CanisterDesign(
             id: "seventies", name: "Seventies",
             layout: .stripes(face: 0xF3E3C3, stripes: [0xE8A33D, 0xD9642B, 0xA83C24, 0x5B3A29], name: 0x5B3A29, detail: 0xA83C24),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "sunset", name: "Sunset",
+            layout: .bands(face: 0xF4E9D8, band: 0xE8732C, accent: 0xC0392B, name: 0x141414, detail: 0x7A3A1E),
             steelCaps: false
         ),
         CanisterDesign(
@@ -98,14 +89,74 @@ struct CanisterDesign: Identifiable, Hashable {
             steelCaps: true
         ),
         CanisterDesign(
+            id: "chroma", name: "Chroma",
+            layout: .sash(face: 0xF5F4F0, stripe: 0xD6246E, edge: 0x141414, name: 0x141414, detail: 0xD6246E),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "plum", name: "Plum",
+            layout: .split(panel: 0x5B2A6E, panelText: 0xF1E4EF, face: 0xF1E4EF, name: 0x5B2A6E, detail: 0x3A2A40),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "velvet", name: "Velvet",
+            layout: .bands(face: 0xF4F2EC, band: 0x4B2C6F, accent: 0x00843D, name: 0x4B2C6F, detail: 0x00843D),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "evergreen", name: "Evergreen",
+            layout: .split(panel: 0x00843D, panelText: 0xF4F4F0, face: 0xF4F4F0, name: 0x00843D, detail: 0xC8102E),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "studio", name: "Studio",
+            layout: .stripes(face: 0xF4F4F0, stripes: [0x0B5A33, 0x00843D, 0x5DB47E, 0xA9D9B8], name: 0x0B5A33, detail: 0x00843D),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "mint", name: "Mint",
+            layout: .bands(face: 0xDDEFE3, band: 0x2E8B6E, accent: 0x141414, name: 0x1E5C49, detail: 0x2E8B6E),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "olive", name: "Olive",
+            layout: .split(panel: 0x6B7A2A, panelText: 0xEFE9D2, face: 0xEFE9D2, name: 0x4F5A1E, detail: 0x2E3412),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "finegrain", name: "Fine Grain",
+            layout: .split(panel: 0x00843D, panelText: 0x141414, face: 0x141414, name: 0xF4F4F0, detail: 0x7FC49A),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "lagoon", name: "Lagoon",
+            layout: .split(panel: 0x0E7C86, panelText: 0x141414, face: 0x141414, name: 0x6FD3CC, detail: 0xF2EDE4),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "glacier", name: "Glacier",
+            layout: .sash(face: 0xE9F1F7, stripe: 0x3B82C4, edge: 0x1B3F66, name: 0x1B3F66, detail: 0x3B82C4),
+            steelCaps: true
+        ),
+        CanisterDesign(
             id: "chrome", name: "Chrome",
             layout: .stripes(face: 0x0F2A5C, stripes: [0x5AB0E8, 0xF4F4F0, 0xE94F37], name: 0xF4F4F0, detail: 0x5AB0E8),
             steelCaps: false
         ),
         CanisterDesign(
-            id: "sunbleached", name: "Sun-Bleached",
-            layout: .split(panel: 0xE3CD84, panelText: 0x3A3631, face: 0x3A3631, name: 0xE3CD84, detail: 0xCFC6B4),
+            id: "nightshift", name: "Night Shift",
+            layout: .bands(face: 0x16213E, band: 0xE94F37, accent: 0xF2C14E, name: 0xF4F1EA, detail: 0xF2C14E),
             steelCaps: false
+        ),
+        CanisterDesign(
+            id: "ledger", name: "Ledger",
+            layout: .paper(tin: 0x111113, paper: 0xF3EEE1, ink: 0x1D2A4A, rule: 0xC0392B),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "cinemacan", name: "Cinema Can",
+            layout: .sash(face: 0x3A3D40, stripe: 0xC8102E, edge: 0xE8E8E8, name: 0xF4F4F0, detail: 0xE8E8E8),
+            steelCaps: true
         ),
         CanisterDesign(
             id: "prolab", name: "Pro Lab",
@@ -115,63 +166,6 @@ struct CanisterDesign: Identifiable, Hashable {
         CanisterDesign(
             id: "monochrome", name: "Monochrome",
             layout: .split(panel: 0xF4F4F0, panelText: 0x141414, face: 0x141414, name: 0xF4F4F0, detail: 0x9A9A9A),
-            steelCaps: true
-        ),
-        CanisterDesign(
-            id: "cinemacan", name: "Cinema Can",
-            layout: .sash(face: 0x3A3D40, stripe: 0xC8102E, edge: 0xE8E8E8, name: 0xF4F4F0, detail: 0xE8E8E8),
-            steelCaps: true
-        ),
-        // Yellow-box consumer and pro stocks.
-        CanisterDesign(
-            id: "goldhour", name: "Gold Hour",
-            layout: .split(panel: 0xC8102E, panelText: 0xF6B800, face: 0xF6B800, name: 0xC8102E, detail: 0x141414),
-            steelCaps: false
-        ),
-        CanisterDesign(
-            id: "portrait", name: "Portrait",
-            layout: .bands(face: 0xF7F3EA, band: 0xD9A21B, accent: 0x7A5A2A, name: 0x3A2A17, detail: 0xB07A12),
-            steelCaps: true
-        ),
-        CanisterDesign(
-            id: "saturate", name: "Saturate",
-            layout: .sash(face: 0xF6B800, stripe: 0xD52B1E, edge: 0x141414, name: 0x141414, detail: 0xD52B1E),
-            steelCaps: false
-        ),
-        CanisterDesign(
-            id: "pushed", name: "Pushed",
-            layout: .split(panel: 0x141414, panelText: 0xF6B800, face: 0xF6B800, name: 0x141414, detail: 0xC8102E),
-            steelCaps: true
-        ),
-        CanisterDesign(
-            id: "slideshow", name: "Slide Show",
-            layout: .stripes(face: 0xF6B800, stripes: [0xE0453A, 0xC8102E, 0x141414], name: 0x141414, detail: 0xC8102E),
-            steelCaps: false
-        ),
-        // Green-box stocks from the other side of the Pacific.
-        CanisterDesign(
-            id: "evergreen", name: "Evergreen",
-            layout: .split(panel: 0x00843D, panelText: 0xF4F4F0, face: 0xF4F4F0, name: 0x00843D, detail: 0xC8102E),
-            steelCaps: false
-        ),
-        CanisterDesign(
-            id: "velvet", name: "Velvet",
-            layout: .bands(face: 0xF4F2EC, band: 0x4B2C6F, accent: 0x00843D, name: 0x4B2C6F, detail: 0x00843D),
-            steelCaps: false
-        ),
-        CanisterDesign(
-            id: "reversal", name: "Reversal",
-            layout: .sash(face: 0xF4F4F0, stripe: 0x1F4E9A, edge: 0x00843D, name: 0x141414, detail: 0x1F4E9A),
-            steelCaps: true
-        ),
-        CanisterDesign(
-            id: "finegrain", name: "Fine Grain",
-            layout: .split(panel: 0x00843D, panelText: 0x141414, face: 0x141414, name: 0xF4F4F0, detail: 0x7FC49A),
-            steelCaps: true
-        ),
-        CanisterDesign(
-            id: "studio", name: "Studio",
-            layout: .stripes(face: 0xF4F4F0, stripes: [0x0B5A33, 0x00843D, 0x5DB47E, 0xA9D9B8], name: 0x0B5A33, detail: 0x00843D),
             steelCaps: true
         ),
         tape
