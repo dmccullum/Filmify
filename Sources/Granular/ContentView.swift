@@ -142,12 +142,24 @@ private struct ModePicker: View {
 
         Picker("Mode", selection: $model.operationMode) {
             ForEach(OperationMode.allCases) { mode in
-                Text(mode.rawValue).tag(mode)
+                Text(mode.rawValue)
+                    .tag(mode)
+                    .help(mode.help)
             }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
+        .help("Switch between Instant and Edit (⌘1, ⌘2)")
+    }
+}
+
+private extension OperationMode {
+    var help: String {
+        switch self {
+        case .drop: "Instant: drop images to process them straight to a folder (⌘1)"
+        case .edit: "Edit: adjust one image with a live preview, then export (⌘2)"
+        }
     }
 }
 
