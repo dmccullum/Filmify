@@ -168,23 +168,26 @@ final class AppModel {
     // MARK: Edit document state
     // Keep each area's new stored state under its own mark.
 
-    /// Every image open in Edit mode, in filmstrip order. The one recipe
-    /// applies to whichever is shown.
-    var openImageURLs: [URL] = []
-    var imageThumbnails: [URL: NSImage] = [:]
-    /// Processed previews of open images for `previewCacheRecipe`, so moving
-    /// along the filmstrip doesn’t flash each original while it renders.
-    var processedPreviewCache: [URL: NSImage] = [:]
-    var previewCacheRecipe: FilmRecipe?
+    /// The open image’s upright size, format and file size, read from its header.
+    var sourceInfo: EditorSourceInfo?
     /// Newest first, for File ▸ Open Recent and the Dock menu.
     var recentImages: [RecentImage] = RecentImageStore.load()
     var editorAlert: EditorAlert?
     var editorNotice: EditorNotice?
-    var editorNoticeTask: Task<Void, Never>?
-    var batchExport: BatchExportProgress?
-    var batchExportTask: Task<Void, Never>?
-    /// Full-resolution renders under way for sharing, dragging or copying.
+    @ObservationIgnored var editorNoticeTask: Task<Void, Never>?
+    /// Full-size renders for sharing, dragging or copying that something is waiting on.
     var transferRenderCount = 0
+    /// The last full-size render, reused while the image and its settings stay the same.
+    @ObservationIgnored var transferRender: TransferRender?
+    /// Keeps the share picker alive while it’s open.
+    @ObservationIgnored var sharePicker: ProcessedImageSharePicker?
+    /// The long edge, in screen pixels, the viewer shows the image at. Previews
+    /// render no larger than they’re seen.
+    @ObservationIgnored var previewDisplayDimension: CGFloat = AppModel.interactivePreviewDimension
+    /// The size the preview on screen was rendered at.
+    @ObservationIgnored var renderedPreviewDimension: CGFloat = 0
+    @ObservationIgnored var previewRefinementTask: Task<Void, Never>?
+    @ObservationIgnored var previewWantsRefinement = false
 
     // MARK: Instant processing state
     // Keep each area's new stored state under its own mark.

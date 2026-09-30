@@ -46,13 +46,8 @@ struct ContentView: View {
         .toolbar(removing: showsCameraBody ? .title : nil)
         // In Edit mode the window stands for the open image: its name and
         // proxy icon, with the recipe beneath. Instant mode keeps its nameplate.
-        .navigationTitle(model.editorWindowTitle)
-        .navigationSubtitle(model.editorWindowSubtitle)
         .background {
-            if model.operationMode == .edit, let url = model.selectedSourceURL {
-                Color.clear
-                    .navigationDocument(url)
-            }
+            EditorWindowDocument()
         }
         .toolbar {
             if showsCameraBody {
@@ -60,6 +55,9 @@ struct ContentView: View {
                     CameraNameplate()
                 }
                 .sharedBackgroundVisibility(.hidden)
+            }
+            if model.operationMode == .edit {
+                EditorToolbar()
             }
             ToolbarItem(placement: .primaryAction) {
                 ModePicker()
@@ -85,6 +83,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .granularOpenURLs)) { notification in
             guard let urls = notification.object as? [URL] else { return }
+            // Edit mode opens the first and offers the rest to Instant mode.
             if model.operationMode == .edit {
                 model.openForEditing(urls)
             } else {

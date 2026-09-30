@@ -3,12 +3,16 @@ import GranularCore
 import Foundation
 import ImageIO
 import Observation
-import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
-// Edit mode: opening, previewing and exporting images, one recipe across all of them.
+// Edit mode: one image at a time, previewed live with the recipe, then exported.
 extension AppModel {
+    /// Previews render at most this large while the recipe is changing, so a
+    /// slider keeps up; a sharper one follows once it settles, if the viewer
+    /// shows the image larger than this.
+    static let interactivePreviewDimension: CGFloat = 2_400
+
     func chooseImages() {
         switch operationMode {
         case .drop:
@@ -30,149 +34,88 @@ extension AppModel {
 
     func chooseImageForEditing() {
         let panel = NSOpenPanel()
-        panel.title = "Open Images"
+        panel.title = "Open Image"
         panel.allowedContentTypes = Self.supportedImageTypes
-        panel.allowsMultipleSelection = true
+        panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
         openForEditing(panel.urls)
     }
 
-    /// Opens images alongside any already open and shows the first of them.
-    /// Files Granular can’t read are named in an alert rather than skipped silently.
+    /// Opens the first of `urls` that Granular can read, in place of the image
+    /// already open. Edit mode works on one image at a time, so when several
+    /// arrive together the notice offers to process them all in Instant mode.
+    /// If none can be opened, an alert names them rather than skipping silently.
     func openForEditing(_ urls: [URL]) {
-        var readable: [URL] = []
         var unopened: [URL] = []
+        var opened: URL?
         for url in urls {
             guard Self.isSupportedImage(url) else {
                 unopened.append(url)
                 continue
             }
             retainSecurityScope(for: url)
-            if Self.isReadableImage(url) {
-                readable.append(url)
-            } else {
-                unopened.append(url)
+            if Self.isReadableImage(url), showImage(url) {
+                opened = url
+                break
             }
+            unopened.append(url)
         }
 
-        openImageURLs = OpenImages.appending(readable, to: openImageURLs)
-        for url in readable {
-            noteRecentImage(url)
-            loadThumbnail(for: url)
+        guard let opened else {
+            if !unopened.isEmpty {
+                editorAlert = .unopened(unopened)
+            }
+            return
         }
-        if let first = readable.first,
-           let shown = openImageURLs.first(where: { $0.standardizedFileURL == first.standardizedFileURL }) {
-            showImage(shown)
-        }
-        if !unopened.isEmpty {
-            editorAlert = .unopened(unopened, openedAny: !readable.isEmpty)
+        noteRecentImage(opened)
+
+        let images = urls.filter(Self.isSupportedImage)
+        if images.count > 1 {
+            showEditorNotice(
+                "Opened “\(opened.lastPathComponent)”. Edit works on one image at a time.",
+                action: .processInInstant(images)
+            )
         }
     }
 
-    /// Shows one of the open images in the canvas.
-    func showImage(_ url: URL) {
-        guard let image = NSImage(contentsOf: url) else {
-            editorAlert = .unopened([url], openedAny: false)
-            closeImage(url)
-            return
-        }
+    /// Shows an image in the canvas, in place of any already open.
+    private func showImage(_ url: URL) -> Bool {
+        guard let image = NSImage(contentsOf: url) else { return false }
 
-        previewTask?.cancel()
-        previewTask = nil
+        cancelPreviewRendering()
         selectedSourceURL = url
         sourcePreview = image
+        sourceInfo = EditorSourceInfo(url: url)
+        processedPreview = nil
         showOriginal = false
+        editorNotice = nil
         let isChangingMode = operationMode != .edit
         operationMode = .edit
         if isChangingMode {
             scheduleWindowResize(for: .edit, animated: true)
         }
-
-        if previewCacheRecipe == recipe, let cached = processedPreviewCache[url] {
-            processedPreview = cached
-            previewNeedsRender = false
-            isRenderingPreview = false
-            statusMessage = url.lastPathComponent
-        } else {
-            processedPreview = nil
-            statusMessage = "Rendering preview…"
-            schedulePreview()
-        }
-    }
-
-    var canShowNextImage: Bool {
-        OpenImages.neighbor(of: selectedSourceURL, offset: 1, in: openImageURLs) != nil
-    }
-
-    var canShowPreviousImage: Bool {
-        OpenImages.neighbor(of: selectedSourceURL, offset: -1, in: openImageURLs) != nil
-    }
-
-    func showNextImage() {
-        guard let url = OpenImages.neighbor(of: selectedSourceURL, offset: 1, in: openImageURLs) else { return }
-        showImage(url)
-    }
-
-    func showPreviousImage() {
-        guard let url = OpenImages.neighbor(of: selectedSourceURL, offset: -1, in: openImageURLs) else { return }
-        showImage(url)
+        statusMessage = "Rendering preview…"
+        schedulePreview()
+        return true
     }
 
     func closeEditorImage() {
-        guard let url = selectedSourceURL else { return }
-        closeImage(url)
-    }
-
-    /// Closes one image; if it was showing, its neighbour takes its place.
-    func closeImage(_ url: URL) {
-        let index = openImageURLs.firstIndex(of: url)
-        openImageURLs.removeAll { $0 == url }
-        imageThumbnails[url] = nil
-        processedPreviewCache[url] = nil
-        guard url == selectedSourceURL else { return }
-
-        if let index, let next = OpenImages.selectionAfterClosing(at: index, remaining: openImageURLs) {
-            showImage(next)
-        } else {
-            closeAllImages()
-        }
-    }
-
-    func closeAllImages() {
-        previewTask?.cancel()
-        previewTask = nil
-        openImageURLs = []
-        imageThumbnails = [:]
-        processedPreviewCache = [:]
+        cancelPreviewRendering()
         selectedSourceURL = nil
         sourcePreview = nil
+        sourceInfo = nil
         processedPreview = nil
         showOriginal = false
         isRenderingPreview = false
         statusMessage = "Ready"
     }
 
-    /// A small thumbnail of the original for the filmstrip, read without
-    /// decoding the whole image.
-    func loadThumbnail(for url: URL) {
-        guard imageThumbnails[url] == nil else { return }
-        Task {
-            let thumbnail = await Task.detached(priority: .utility) {
-                Self.thumbnail(of: url, maximumPixelSize: 160)
-            }.value
-            guard let thumbnail, openImageURLs.contains(url) else { return }
-            imageThumbnails[url] = NSImage(cgImage: thumbnail, size: .zero)
-        }
-    }
-
-    nonisolated static func thumbnail(of url: URL, maximumPixelSize: Int) -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize
-        ] as CFDictionary)
+    /// Sends images that arrived in Edit mode over to Instant mode to be processed.
+    func processInInstant(_ urls: [URL]) {
+        editorNotice = nil
+        operationMode = .drop
+        Task { await processInstantly(urls) }
     }
 
     /// Whether ImageIO recognises the file as an image, read from its header.
@@ -219,27 +162,77 @@ extension AppModel {
         guard operationMode == .edit, selectedSourceURL != nil, processingService != nil else {
             return
         }
-        isRenderingPreview = true
+        previewRefinementTask?.cancel()
+        previewRefinementTask = nil
+        // Setting an observed value tells its views even when it’s unchanged,
+        // and this runs with every step of a slider drag.
+        if !isRenderingPreview {
+            isRenderingPreview = true
+        }
         previewNeedsRender = true
+        startRenderingPreviews()
+    }
+
+    /// Tells the preview how large the viewer shows the image, as its long
+    /// edge in screen pixels. Previews render no larger than that; zooming in
+    /// past the preview on screen renders a sharper one once the zoom
+    /// settles, and panning never renders at all.
+    func setPreviewDisplaySize(longEdge: CGFloat) {
+        let dimension = CGFloat(PreviewSizing.renderDimension(
+            displayedLongEdge: Double(longEdge),
+            sourceLongEdge: sourceInfo.map { Double($0.longEdge) }
+        ))
+        guard dimension != previewDisplayDimension else { return }
+        previewDisplayDimension = dimension
+        if previewTask == nil {
+            scheduleSharperPreview()
+        }
+    }
+
+    private func startRenderingPreviews() {
         guard previewTask == nil else { return }
         previewTask = Task { await renderPendingPreviews() }
     }
 
-    func renderPendingPreviews() async {
-        while previewNeedsRender, !Task.isCancelled,
-              let sourceURL = selectedSourceURL, let processingService {
-            previewNeedsRender = false
-            let renderedRecipe = recipe
+    private func cancelPreviewRendering() {
+        previewTask?.cancel()
+        previewTask = nil
+        previewRefinementTask?.cancel()
+        previewRefinementTask = nil
+        previewNeedsRender = false
+        previewWantsRefinement = false
+        renderedPreviewDimension = 0
+    }
+
+    private func renderPendingPreviews() async {
+        while !Task.isCancelled, let sourceURL = selectedSourceURL, let processingService {
+            let dimension: CGFloat
+            if previewNeedsRender {
+                previewNeedsRender = false
+                dimension = CGFloat(PreviewSizing.interactiveDimension(
+                    for: Double(previewDisplayDimension),
+                    limit: Double(Self.interactivePreviewDimension)
+                ))
+            } else if previewWantsRefinement {
+                previewWantsRefinement = false
+                guard PreviewSizing.needsSharperRender(
+                    rendered: Double(renderedPreviewDimension),
+                    wanted: Double(previewDisplayDimension)
+                ) else { continue }
+                dimension = previewDisplayDimension
+            } else {
+                break
+            }
+
             do {
                 let image = try await processingService.renderPreview(
                     sourceURL: sourceURL,
-                    recipe: renderedRecipe,
-                    maximumDimension: 2_400
+                    recipe: recipe,
+                    maximumDimension: dimension
                 )
                 guard !Task.isCancelled else { return }
-                let preview = NSImage(cgImage: image, size: .zero)
-                processedPreview = preview
-                cacheProcessedPreview(preview, for: sourceURL, recipe: renderedRecipe)
+                processedPreview = NSImage(cgImage: image, size: .zero)
+                renderedPreviewDimension = dimension
                 statusMessage = sourceURL.lastPathComponent
             } catch {
                 guard !Task.isCancelled else { return }
@@ -249,20 +242,25 @@ extension AppModel {
         guard !Task.isCancelled else { return }
         isRenderingPreview = false
         previewTask = nil
+        scheduleSharperPreview()
     }
 
-    /// Keeps a few recent previews for the current recipe; any change to the
-    /// recipe starts the cache afresh.
-    private func cacheProcessedPreview(_ preview: NSImage, for url: URL, recipe: FilmRecipe) {
-        if previewCacheRecipe != recipe {
-            previewCacheRecipe = recipe
-            processedPreviewCache = [:]
+    /// Once changes and zooming have settled, renders a sharper preview if
+    /// the viewer shows the image larger than the one on screen.
+    private func scheduleSharperPreview() {
+        previewRefinementTask?.cancel()
+        previewRefinementTask = nil
+        guard operationMode == .edit, PreviewSizing.needsSharperRender(
+            rendered: Double(renderedPreviewDimension),
+            wanted: Double(previewDisplayDimension)
+        ) else { return }
+        previewRefinementTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            previewRefinementTask = nil
+            previewWantsRefinement = true
+            startRenderingPreviews()
         }
-        if processedPreviewCache.count >= 8,
-           let evicted = processedPreviewCache.keys.first(where: { $0 != url }) {
-            processedPreviewCache[evicted] = nil
-        }
-        processedPreviewCache[url] = preview
     }
 
     /// Renders a small Film Tone preview of every stock for the stock picker,
@@ -333,76 +331,11 @@ extension AppModel {
             )
             updateJob(job.id, state: .finished(output))
             statusMessage = "Exported \(output.lastPathComponent)"
-            showEditorNotice("Exported “\(output.lastPathComponent)”", revealing: output)
+            showEditorNotice("Exported “\(output.lastPathComponent)”", action: .reveal(output))
         } catch {
             updateJob(job.id, state: .failed(error.localizedDescription))
             statusMessage = "Export failed: \(error.localizedDescription)"
-            editorAlert = .exportFailed([sourceURL], reason: error.localizedDescription)
-        }
-    }
-
-    /// Exports every open image with the current recipe into one folder,
-    /// named as Instant mode names its output.
-    func exportAllImages() {
-        guard !openImageURLs.isEmpty, batchExport == nil else { return }
-        let panel = NSOpenPanel()
-        panel.title = "Export All Images"
-        panel.message = "Choose a folder for \(openImageURLs.count) filmified images."
-        panel.prompt = "Export"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let folder = panel.url else { return }
-
-        let urls = openImageURLs
-        batchExport = BatchExportProgress(completed: 0, total: urls.count)
-        batchExportTask = Task { await exportImages(urls, to: folder) }
-    }
-
-    func cancelBatchExport() {
-        batchExportTask?.cancel()
-    }
-
-    private func exportImages(_ urls: [URL], to folder: URL) async {
-        guard let processingService else { return }
-        persistRecipeSelection()
-        let recipe = recipe
-        let options = outputOptions
-        var failed: [URL] = []
-        var lastError: String?
-        var exported = 0
-
-        for url in urls {
-            guard !Task.isCancelled else { break }
-            let job = ProcessingJob(sourceURL: url, state: .processing)
-            jobs.insert(job, at: 0)
-            statusMessage = "Exporting \(url.lastPathComponent)…"
-            do {
-                let output = try await processingService.process(
-                    sourceURL: url,
-                    destinationFolder: folder,
-                    recipe: recipe,
-                    options: options
-                )
-                updateJob(job.id, state: .finished(output))
-                exported += 1
-            } catch {
-                updateJob(job.id, state: .failed(error.localizedDescription))
-                failed.append(url)
-                lastError = error.localizedDescription
-            }
-            batchExport?.completed += 1
-        }
-
-        batchExport = nil
-        batchExportTask = nil
-        statusMessage = "Exported \(exported) of \(urls.count) images"
-        if !failed.isEmpty {
-            editorAlert = .exportFailed(failed, reason: lastError)
-        } else if exported > 0 {
-            let noun = exported == 1 ? "image" : "images"
-            showEditorNotice("Exported \(exported) \(noun) to “\(folder.lastPathComponent)”", revealing: folder)
+            editorAlert = .exportFailed(sourceURL, reason: error.localizedDescription)
         }
     }
 
@@ -428,9 +361,9 @@ extension AppModel {
     }
 
     /// A short confirmation in the status bar that clears itself.
-    func showEditorNotice(_ message: String, revealing url: URL? = nil) {
+    func showEditorNotice(_ message: String, action: EditorNotice.Action? = nil) {
         editorNoticeTask?.cancel()
-        editorNotice = EditorNotice(message: message, revealURL: url)
+        editorNotice = EditorNotice(message: message, action: action)
         editorNoticeTask = Task {
             try? await Task.sleep(for: .seconds(6))
             guard !Task.isCancelled else { return }
@@ -500,7 +433,7 @@ struct EditorAlert: Identifiable {
     let message: String
 
     /// Files that aren’t images Granular can read, named so it’s clear which.
-    @MainActor static func unopened(_ urls: [URL], openedAny: Bool) -> EditorAlert {
+    @MainActor static func unopened(_ urls: [URL]) -> EditorAlert {
         let formats = "Granular opens JPEG, HEIC, PNG, and TIFF images."
         if urls.count == 1, let url = urls.first {
             let reason = AppModel.isSupportedImage(url)
@@ -508,10 +441,10 @@ struct EditorAlert: Identifiable {
                 : formats
             return EditorAlert(title: "Granular can’t open “\(url.lastPathComponent)”.", message: reason)
         }
-        let title = openedAny
-            ? "\(urls.count) files weren’t opened."
-            : "Granular can’t open these \(urls.count) files."
-        return EditorAlert(title: title, message: "\(listing(urls))\n\n\(formats)")
+        return EditorAlert(
+            title: "Granular can’t open these \(urls.count) files.",
+            message: "\(listing(urls))\n\n\(formats)"
+        )
     }
 
     static func missing(_ url: URL) -> EditorAlert {
@@ -521,15 +454,8 @@ struct EditorAlert: Identifiable {
         )
     }
 
-    static func exportFailed(_ urls: [URL], reason: String?) -> EditorAlert {
-        let title = urls.count == 1
-            ? "“\(urls[0].lastPathComponent)” couldn’t be exported."
-            : "\(urls.count) images couldn’t be exported."
-        let detail = urls.count == 1 ? nil : listing(urls)
-        return EditorAlert(
-            title: title,
-            message: [detail, reason].compactMap { $0 }.joined(separator: "\n\n")
-        )
+    static func exportFailed(_ url: URL, reason: String) -> EditorAlert {
+        EditorAlert(title: "“\(url.lastPathComponent)” couldn’t be exported.", message: reason)
     }
 
     private static func listing(_ urls: [URL]) -> String {
@@ -540,11 +466,41 @@ struct EditorAlert: Identifiable {
 }
 
 struct EditorNotice: Equatable {
+    enum Action: Equatable {
+        /// Show in Finder.
+        case reveal(URL)
+        /// Process images that arrived in Edit mode with Instant mode instead.
+        case processInInstant([URL])
+    }
+
     let message: String
-    let revealURL: URL?
+    let action: Action?
 }
 
-struct BatchExportProgress: Equatable {
-    var completed: Int
-    let total: Int
+/// What the status bar says about the open image, read from its header.
+struct EditorSourceInfo: Equatable {
+    /// Upright, as it’s shown and exported.
+    let pixelSize: CGSize
+    /// The format, such as “JPEG”.
+    let formatName: String?
+    let byteCount: Int?
+
+    var longEdge: CGFloat {
+        max(pixelSize.width, pixelSize.height)
+    }
+
+    init?(url: URL) {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        // Orientations 5 to 8 turn the image on its side.
+        let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
+        pixelSize = orientation >= 5
+            ? CGSize(width: height, height: width)
+            : CGSize(width: width, height: height)
+        formatName = CGImageSourceGetType(source)
+            .flatMap { UTType($0 as String)?.preferredFilenameExtension?.uppercased() }
+        byteCount = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+    }
 }
