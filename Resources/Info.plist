@@ -34,6 +34,31 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Filmify with Granular</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>filmifyImages</string>
+            <key>NSPortName</key>
+            <string>Granular</string>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.jpeg</string>
+                <string>public.heic</string>
+                <string>public.png</string>
+                <string>public.tiff</string>
+            </array>
+            <key>NSServiceDescription</key>
+            <string>Processes the selected images with Granular’s current recipe into the Instant output folder.</string>
+        </dict>
+    </array>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
