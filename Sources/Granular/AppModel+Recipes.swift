@@ -8,7 +8,13 @@ import UniformTypeIdentifiers
 
 // Choosing, saving, editing and persisting recipes.
 extension AppModel {
-    func selectRecipe(_ recipe: FilmRecipe) {
+    /// Puts a recipe to use. Choosing one is a step on Edit ▸ Undo; the app's
+    /// own choices, such as falling back after a deletion, aren't.
+    func selectRecipe(_ recipe: FilmRecipe, recordingUndo: Bool = true) {
+        guard !recordingUndo else {
+            changeAdjustments("Choose Recipe") { selectRecipe(recipe, recordingUndo: false) }
+            return
+        }
         selectedRecipeID = recipe.id
         self.recipe = recipe
         persistRecipeSelection()
@@ -42,7 +48,7 @@ extension AppModel {
         recipe.canister = canister
         savedRecipes.append(recipe)
         persistRecipes()
-        selectRecipe(recipe)
+        selectRecipe(recipe, recordingUndo: false)
         statusMessage = "Saved recipe “\(name)”"
         return recipe
     }
@@ -74,7 +80,7 @@ extension AppModel {
 
         savedRecipes.remove(at: index)
         persistRecipes()
-        selectRecipe(.classic35)
+        selectRecipe(.classic35, recordingUndo: false)
         statusMessage = "Deleted recipe “\(name)”"
     }
 
@@ -112,7 +118,7 @@ extension AppModel {
         savedRecipes.remove(at: index)
         persistRecipes()
         if wasSelected {
-            selectRecipe(.classic35)
+            selectRecipe(.classic35, recordingUndo: false)
         }
         statusMessage = "Deleted recipe “\(name)”"
     }
@@ -153,8 +159,9 @@ extension AppModel {
     }
 
     func randomizeGrain() {
-        recipe.grain.seed = UInt32.random(in: 1 ..< 1_000_003)
-        schedulePreview()
+        changeAdjustments("New Grain Pattern") {
+            recipe.grain.seed = UInt32.random(in: 1 ..< 1_000_003)
+        }
     }
 
     func restoreRecipes() {

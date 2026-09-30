@@ -70,6 +70,7 @@ struct GranularDesktopApp: App {
         Window("Granular", id: "main") {
             ContentView()
                 .environment(model)
+                .recordingAdjustmentUndo(for: model)
         }
         .defaultSize(model.initialWindowSize)
         .restorationBehavior(.disabled)
@@ -79,6 +80,7 @@ struct GranularDesktopApp: App {
             ViewerCommands(model: model)
 
             FileCommands(model: model)
+            EditCommands(model: model)
             RecipeCommands(model: model)
             InstantCommands(model: model)
             HelpCommands()

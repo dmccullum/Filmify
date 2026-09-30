@@ -1,3 +1,4 @@
+import AppKit
 import GranularCore
 import SwiftUI
 
@@ -6,6 +7,8 @@ struct AdjustmentsInspector: View {
 
     var body: some View {
         @Bindable var model = model
+        // What each card's Reset puts back, and each slider's double-click.
+        let defaults = model.currentRecipe
 
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -19,14 +22,23 @@ struct AdjustmentsInspector: View {
                     RecipeMenu()
                 }
 
-                FilmToneCard(settings: $model.recipe.tone, reset: model.resetTone)
-                LightShapingCard(settings: $model.recipe.lightShaping, reset: model.resetLightShaping)
-                LensBlurCard(settings: $model.recipe.lensBlur, reset: model.resetLensBlur)
-                DiffusionCard(settings: $model.recipe.diffusion, reset: model.resetDiffusion)
-                HalationCard(settings: $model.recipe.halation, reset: model.resetHalation)
-                LandscapeGlowCard(settings: $model.recipe.landscapeGlow, reset: model.resetLandscapeGlow)
+                FilmToneCard(settings: $model.recipe.tone, defaults: defaults.tone, reset: model.resetTone)
+                LightShapingCard(
+                    settings: $model.recipe.lightShaping,
+                    defaults: defaults.lightShaping,
+                    reset: model.resetLightShaping
+                )
+                LensBlurCard(settings: $model.recipe.lensBlur, defaults: defaults.lensBlur, reset: model.resetLensBlur)
+                DiffusionCard(settings: $model.recipe.diffusion, defaults: defaults.diffusion, reset: model.resetDiffusion)
+                HalationCard(settings: $model.recipe.halation, defaults: defaults.halation, reset: model.resetHalation)
+                LandscapeGlowCard(
+                    settings: $model.recipe.landscapeGlow,
+                    defaults: defaults.landscapeGlow,
+                    reset: model.resetLandscapeGlow
+                )
                 GrainCard(
                     settings: $model.recipe.grain,
+                    defaults: defaults.grain,
                     reset: model.resetGrain,
                     randomize: model.randomizeGrain
                 )
@@ -40,7 +52,9 @@ struct AdjustmentsInspector: View {
 }
 
 private struct FilmToneCard: View {
+    @Environment(AppModel.self) private var model
     @Binding var settings: FilmToneSettings
+    let defaults: FilmToneSettings
     let reset: () -> Void
 
     var body: some View {
@@ -58,10 +72,12 @@ private struct FilmToneCard: View {
                 FilmStockPickerButton(stock: Binding {
                     settings.stock
                 } set: { stock in
-                    settings.stock = stock
-                    // Choosing a stock is a request to see it.
-                    if stock != .none {
-                        settings.isEnabled = true
+                    model.changeAdjustments("Film Stock") {
+                        settings.stock = stock
+                        // Choosing a stock is a request to see it.
+                        if stock != .none {
+                            settings.isEnabled = true
+                        }
                     }
                 })
             }
@@ -69,21 +85,30 @@ private struct FilmToneCard: View {
             ParameterSlider(
                 "Stock Amount",
                 value: $settings.stockAmount,
-                range: 0 ... FilmToneSettings.maximumStockAmount
+                default: defaults.stockAmount,
+                range: 0 ... FilmToneSettings.maximumStockAmount,
+                display: .strength
             )
                 .disabled(settings.stock == .none)
                 .opacity(settings.stock == .none ? 0.48 : 1)
-            ParameterSlider("Exposure", value: $settings.exposure, range: -2 ... 2, suffix: "EV", decimals: 1)
-            ParameterSlider("Contrast", value: $settings.contrast, range: -1 ... 1)
-            ParameterSlider("Saturation", value: $settings.saturation, range: -1 ... 1)
-            ParameterSlider("Vibrance", value: $settings.vibrance, range: -1 ... 1)
-            ParameterSlider("Warmth", value: $settings.warmth, range: -1 ... 1)
+            ParameterSlider(
+                "Exposure",
+                value: $settings.exposure,
+                default: defaults.exposure,
+                range: -2 ... 2,
+                display: .exposure
+            )
+            ParameterSlider("Contrast", value: $settings.contrast, default: defaults.contrast, range: -1 ... 1)
+            ParameterSlider("Saturation", value: $settings.saturation, default: defaults.saturation, range: -1 ... 1)
+            ParameterSlider("Vibrance", value: $settings.vibrance, default: defaults.vibrance, range: -1 ... 1)
+            ParameterSlider("Warmth", value: $settings.warmth, default: defaults.warmth, range: -1 ... 1)
         } advanced: {}
     }
 }
 
 private struct LightShapingCard: View {
     @Binding var settings: LightShapingSettings
+    let defaults: LightShapingSettings
     let reset: () -> Void
 
     var body: some View {
@@ -94,12 +119,24 @@ private struct LightShapingCard: View {
             enabled: $settings.isEnabled,
             reset: reset
         ) {
-            ParameterSlider("Amount", value: $settings.amountStops, range: 0 ... LightShapingSettings.maximumAmount)
-            ParameterSlider("Focus", value: $settings.focus, range: 0 ... 1)
+            ParameterSlider(
+                "Amount",
+                value: $settings.amountStops,
+                default: defaults.amountStops,
+                range: 0 ... LightShapingSettings.maximumAmount,
+                undoName: "Vignette Amount"
+            )
+            ParameterSlider(
+                "Focus",
+                value: $settings.focus,
+                default: defaults.focus,
+                range: 0 ... 1,
+                undoName: "Vignette Focus"
+            )
         } advanced: {
-            ParameterSlider("Pop", value: $settings.pop, range: 0 ... 1)
-            ParameterSlider("Bias", value: $settings.bias, range: 0 ... 1)
-            ParameterSlider("Roundness", value: $settings.roundness, range: 0 ... 1)
+            ParameterSlider("Pop", value: $settings.pop, default: defaults.pop, range: 0 ... 1)
+            ParameterSlider("Bias", value: $settings.bias, default: defaults.bias, range: 0 ... 1)
+            ParameterSlider("Roundness", value: $settings.roundness, default: defaults.roundness, range: 0 ... 1)
             CenterControlRow(
                 title: "Center",
                 target: .vignette,
@@ -113,6 +150,7 @@ private struct LightShapingCard: View {
 
 private struct LensBlurCard: View {
     @Binding var settings: LensBlurSettings
+    let defaults: LensBlurSettings
     let reset: () -> Void
 
     var body: some View {
@@ -123,10 +161,21 @@ private struct LensBlurCard: View {
             enabled: $settings.isEnabled,
             reset: reset
         ) {
-            ParameterSlider("Amount", value: $settings.amount, range: 0 ... LensBlurSettings.maximumAmount)
-            ParameterSlider("Falloff", value: $settings.falloff, range: 0 ... 1)
+            ParameterSlider(
+                "Amount",
+                value: $settings.amount,
+                default: defaults.amount,
+                range: 0 ... LensBlurSettings.maximumAmount,
+                undoName: "Lens Blur Amount"
+            )
+            ParameterSlider("Falloff", value: $settings.falloff, default: defaults.falloff, range: 0 ... 1)
         } advanced: {
-            ParameterSlider("Chromatic Aberration", value: $settings.colorFringing, range: 0 ... 1)
+            ParameterSlider(
+                "Chromatic Aberration",
+                value: $settings.colorFringing,
+                default: defaults.colorFringing,
+                range: 0 ... 1
+            )
             CenterControlRow(
                 title: "Focus",
                 target: .lensBlur,
@@ -140,6 +189,7 @@ private struct LensBlurCard: View {
 
 private struct DiffusionCard: View {
     @Binding var settings: DiffusionSettings
+    let defaults: DiffusionSettings
     let reset: () -> Void
 
     var body: some View {
@@ -150,18 +200,31 @@ private struct DiffusionCard: View {
             enabled: $settings.isEnabled,
             reset: reset
         ) {
-            ParameterSlider("Amount", value: $settings.amount, range: 0 ... DiffusionSettings.maximumAmount)
-            ParameterSlider("Bloom", value: $settings.bloom, range: 0 ... 1)
+            ParameterSlider(
+                "Amount",
+                value: $settings.amount,
+                default: defaults.amount,
+                range: 0 ... DiffusionSettings.maximumAmount,
+                undoName: "Diffusion Amount"
+            )
+            ParameterSlider("Bloom", value: $settings.bloom, default: defaults.bloom, range: 0 ... 1)
         } advanced: {
-            ParameterSlider("Veil", value: $settings.veil, range: 0 ... 0.5)
-            ParameterSlider("Source Bias", value: $settings.sourceBias, range: 0 ... 1)
-            ParameterSlider("Warmth", value: $settings.warmth, range: -1 ... 1)
+            ParameterSlider("Veil", value: $settings.veil, default: defaults.veil, range: 0 ... 0.5)
+            ParameterSlider("Source Bias", value: $settings.sourceBias, default: defaults.sourceBias, range: 0 ... 1)
+            ParameterSlider(
+                "Warmth",
+                value: $settings.warmth,
+                default: defaults.warmth,
+                range: -1 ... 1,
+                undoName: "Diffusion Warmth"
+            )
         }
     }
 }
 
 private struct HalationCard: View {
     @Binding var settings: HalationSettings
+    let defaults: HalationSettings
     let reset: () -> Void
 
     var body: some View {
@@ -172,19 +235,42 @@ private struct HalationCard: View {
             enabled: $settings.isEnabled,
             reset: reset
         ) {
-            ParameterSlider("Amount", value: $settings.amount, range: 0 ... HalationSettings.maximumAmount)
-            ParameterSlider("Spill Radius", value: $settings.spillRadius, range: 0 ... 1)
+            ParameterSlider(
+                "Amount",
+                value: $settings.amount,
+                default: defaults.amount,
+                range: 0 ... HalationSettings.maximumAmount,
+                undoName: "Halation Amount"
+            )
+            ParameterSlider(
+                "Spill Radius",
+                value: $settings.spillRadius,
+                default: defaults.spillRadius,
+                range: 0 ... 1
+            )
         } advanced: {
-            ParameterSlider("Tail", value: $settings.tail, range: 0 ... 1)
-            ParameterSlider("Color Shift", value: $settings.colorShift, range: 0 ... 1)
-            ParameterSlider("Saturation", value: $settings.saturation, range: 0 ... 1)
-            ParameterSlider("Green Leakage", value: $settings.greenLeakage, range: 0 ... 0.5)
+            ParameterSlider("Tail", value: $settings.tail, default: defaults.tail, range: 0 ... 1)
+            ParameterSlider("Color Shift", value: $settings.colorShift, default: defaults.colorShift, range: 0 ... 1)
+            ParameterSlider(
+                "Saturation",
+                value: $settings.saturation,
+                default: defaults.saturation,
+                range: 0 ... 1,
+                undoName: "Halation Saturation"
+            )
+            ParameterSlider(
+                "Green Leakage",
+                value: $settings.greenLeakage,
+                default: defaults.greenLeakage,
+                range: 0 ... 0.5
+            )
         }
     }
 }
 
 private struct LandscapeGlowCard: View {
     @Binding var settings: LandscapeGlowSettings
+    let defaults: LandscapeGlowSettings
     let reset: () -> Void
 
     var body: some View {
@@ -198,18 +284,26 @@ private struct LandscapeGlowCard: View {
             ParameterSlider(
                 "Amount",
                 value: $settings.amount,
-                range: 0 ... LandscapeGlowSettings.maximumAmount
+                default: defaults.amount,
+                range: 0 ... LandscapeGlowSettings.maximumAmount,
+                undoName: "Glow Amount"
             )
-            ParameterSlider("Glow Size", value: $settings.glowSize, range: 0 ... 1)
+            ParameterSlider("Glow Size", value: $settings.glowSize, default: defaults.glowSize, range: 0 ... 1)
         } advanced: {
-            ParameterSlider("Shadow Protection", value: $settings.shadowProtection, range: 0 ... 1)
-            ParameterSlider("Detail", value: $settings.detail, range: 0 ... 1)
+            ParameterSlider(
+                "Shadow Protection",
+                value: $settings.shadowProtection,
+                default: defaults.shadowProtection,
+                range: 0 ... 1
+            )
+            ParameterSlider("Detail", value: $settings.detail, default: defaults.detail, range: 0 ... 1)
         }
     }
 }
 
 private struct GrainCard: View {
     @Binding var settings: GrainSettings
+    let defaults: GrainSettings
     let reset: () -> Void
     let randomize: () -> Void
 
@@ -221,14 +315,41 @@ private struct GrainCard: View {
             enabled: $settings.isEnabled,
             reset: reset
         ) {
-            ParameterSlider("Amount", value: $settings.amount, range: 0 ... GrainSettings.maximumAmount)
-            ParameterSlider("Grain Size", value: $settings.grainSize, range: 2 ... GrainSettings.maximumGrainSize, decimals: 1)
+            ParameterSlider(
+                "Amount",
+                value: $settings.amount,
+                default: defaults.amount,
+                range: 0 ... GrainSettings.maximumAmount,
+                undoName: "Grain Amount"
+            )
+            ParameterSlider(
+                "Grain Size",
+                value: $settings.grainSize,
+                default: defaults.grainSize,
+                range: 2 ... GrainSettings.maximumGrainSize,
+                display: .grainSize
+            )
         } advanced: {
-            ParameterSlider("Acutance", value: $settings.acutance, range: 0 ... 1)
-            ParameterSlider("Size Variation", value: $settings.sizeVariation, range: 0 ... 1)
-            ParameterSlider("Chroma", value: $settings.chroma, range: 0 ... 1)
-            ParameterSlider("Shadow Response", value: $settings.shadowResponse, range: 0 ... 1)
-            ParameterSlider("Highlight Response", value: $settings.highlightResponse, range: 0 ... 1)
+            ParameterSlider("Acutance", value: $settings.acutance, default: defaults.acutance, range: 0 ... 1)
+            ParameterSlider(
+                "Size Variation",
+                value: $settings.sizeVariation,
+                default: defaults.sizeVariation,
+                range: 0 ... 1
+            )
+            ParameterSlider("Chroma", value: $settings.chroma, default: defaults.chroma, range: 0 ... 1)
+            ParameterSlider(
+                "Shadow Response",
+                value: $settings.shadowResponse,
+                default: defaults.shadowResponse,
+                range: 0 ... 1
+            )
+            ParameterSlider(
+                "Highlight Response",
+                value: $settings.highlightResponse,
+                default: defaults.highlightResponse,
+                range: 0 ... 1
+            )
             Button("New Grain Pattern", systemImage: "dice", action: randomize)
                 .buttonStyle(.borderless)
         }
@@ -236,6 +357,7 @@ private struct GrainCard: View {
 }
 
 private struct EffectCard<Primary: View, Advanced: View>: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let title: String
@@ -262,7 +384,9 @@ private struct EffectCard<Primary: View, Advanced: View>: View {
                 Text(title)
                     .font(.headline)
                 Spacer()
-                Button("Reset", systemImage: "arrow.counterclockwise", action: reset)
+                Button("Reset", systemImage: "arrow.counterclockwise") {
+                    model.changeAdjustments("Reset \(title)", reset)
+                }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
                     .help("Reset \(title)")
@@ -360,7 +484,9 @@ private struct EffectCard<Primary: View, Advanced: View>: View {
             get: { enabled },
             set: { newValue in
                 withAnimation(effectAnimation) {
-                    enabled = newValue
+                    model.changeAdjustments(newValue ? "Enable \(title)" : "Disable \(title)") {
+                        enabled = newValue
+                    }
                 }
             }
         )
@@ -416,45 +542,205 @@ private struct AccordionHeightPreferenceKey: PreferenceKey {
     }
 }
 
+/// One adjustment: its name, its value and a slider. Double-click the name to
+/// put back the recipe's own value, which a tick marks under the track; click
+/// the value to type an exact one.
 private struct ParameterSlider: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.isEnabled) private var isEnabled
+
     let title: String
     @Binding var value: Double
+    let defaultValue: Double
     let range: ClosedRange<Double>
-    var suffix = ""
-    var decimals = 2
+    let display: ParameterDisplay
+    /// What Edit ▸ Undo calls a change, where the title alone is ambiguous.
+    let undoName: String
+
+    /// The value being typed, while the readout is a field.
+    @State private var typedValue: String?
+    @FocusState private var isTyping: Bool
+    @FocusState private var isSliderFocused: Bool
 
     init(
         _ title: String,
         value: Binding<Double>,
+        default defaultValue: Double,
         range: ClosedRange<Double>,
-        suffix: String = "",
-        decimals: Int = 2
+        display: ParameterDisplay? = nil,
+        undoName: String? = nil
     ) {
         self.title = title
         _value = value
+        self.defaultValue = defaultValue
         self.range = range
-        self.suffix = suffix
-        self.decimals = decimals
+        self.display = display ?? .proportion(in: range)
+        self.undoName = undoName ?? title
     }
 
     var body: some View {
         VStack(spacing: 4) {
             HStack {
                 Text(title)
+                    .help("Double-click to reset to the recipe’s value")
                 Spacer()
-                Text(formattedValue)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                readout
             }
             .font(.caption)
-            Slider(value: $value, in: range)
-                .tint(.accentColor)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2, perform: resetToDefault)
+
+            Slider(value: sliderValue, in: range) { isEditing in
+                // Letting go ends the drag's undo step.
+                if !isEditing {
+                    model.endCoalescedChanges(undoKey)
+                }
+            }
+            .tint(.accentColor)
+            .background {
+                DefaultValueTick(fraction: defaultFraction)
+            }
+            .focused($isSliderFocused)
+            .onChange(of: isSliderFocused) { _, isFocused in
+                if !isFocused {
+                    model.endCoalescedChanges(undoKey)
+                }
+            }
+            .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+                let direction: Double = press.key == .leftArrow || press.key == .downArrow ? -1 : 1
+                nudge(by: direction * (press.modifiers.contains(.shift) ? 10 : 1))
+                return .handled
+            }
+            .accessibilityLabel(title)
+            .accessibilityValue(display.accessibilityText(for: value))
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: nudge(by: 1)
+                case .decrement: nudge(by: -1)
+                @unknown default: break
+                }
+            }
+            .accessibilityAction(named: "Reset to Recipe Value", resetToDefault)
         }
     }
 
-    private var formattedValue: String {
-        let number = value.formatted(.number.precision(.fractionLength(decimals)))
-        return suffix.isEmpty ? number : "\(number) \(suffix)"
+    @ViewBuilder private var readout: some View {
+        if typedValue != nil {
+            HStack(spacing: 3) {
+                TextField(title, text: typedText)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(width: 40)
+                    .padding(.horizontal, 4)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .focused($isTyping)
+                    .task { isTyping = true }
+                    .onSubmit(commitTypedValue)
+                    .onExitCommand { typedValue = nil }
+                    .onChange(of: isTyping) { _, isTyping in
+                        // Moving on keeps what was typed, as in any Mac field.
+                        if !isTyping {
+                            commitTypedValue()
+                        }
+                    }
+                    .accessibilityLabel(title)
+                if !display.unit.symbol.isEmpty {
+                    Text(display.unit.symbol)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            Button {
+                typedValue = display.editingText(for: value)
+            } label: {
+                Text(display.text(for: value))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Click to type a value")
+            .accessibilityLabel("\(title) Value")
+            .accessibilityValue(display.accessibilityText(for: value))
+            .accessibilityHint("Type an exact value")
+        }
+    }
+
+    private var sliderValue: Binding<Double> {
+        Binding {
+            value
+        } set: { newValue in
+            setValue(newValue, as: undoName, coalescing: true)
+        }
+    }
+
+    private var typedText: Binding<String> {
+        Binding {
+            typedValue ?? ""
+        } set: { text in
+            typedValue = text
+        }
+    }
+
+    /// Where the recipe's own value sits along the track.
+    private var defaultFraction: Double {
+        let span = range.upperBound - range.lowerBound
+        guard span > 0 else { return 0 }
+        return min(1, max(0, (defaultValue - range.lowerBound) / span))
+    }
+
+    /// One slider's drags and nudges each make a single undo step.
+    private var undoKey: String {
+        "slider \(undoName)"
+    }
+
+    private func setValue(_ newValue: Double, as actionName: String, coalescing: Bool = false) {
+        model.changeAdjustments(actionName, coalescingKey: coalescing ? undoKey : nil) {
+            value = newValue
+        }
+    }
+
+    private func resetToDefault() {
+        guard isEnabled else { return }
+        setValue(defaultValue, as: "Reset \(undoName)")
+    }
+
+    private func nudge(by steps: Double) {
+        setValue(display.stepped(value, by: steps, in: range), as: undoName, coalescing: true)
+    }
+
+    private func commitTypedValue() {
+        guard let text = typedValue else { return }
+        typedValue = nil
+        guard let typed = display.storedValue(from: text, in: range) else {
+            if !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                NSSound.beep()
+            }
+            return
+        }
+        setValue(typed, as: undoName)
+    }
+}
+
+/// A small mark under the track at the recipe's own value, covered by the
+/// knob when the slider sits there.
+private struct DefaultValueTick: View {
+    let fraction: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            // The knob's centre travels between half its width from either end.
+            let inset: CGFloat = 10
+            Capsule()
+                .fill(.secondary)
+                .frame(width: 2, height: 3)
+                .position(
+                    x: inset + (proxy.size.width - inset * 2) * fraction,
+                    y: proxy.size.height / 2 + 6
+                )
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
