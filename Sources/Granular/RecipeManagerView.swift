@@ -9,6 +9,9 @@ struct RecipeManagerView: View {
     @State private var draftName = ""
     @State private var renameError: String?
     @State private var isConfirmingDelete = false
+    @State private var isChoosingCanister = false
+    @State private var isSavingRecipe = false
+    @State private var isHoveringCanister = false
     @FocusState private var isEditingName: Bool
 
     var body: some View {
@@ -43,6 +46,10 @@ struct RecipeManagerView: View {
                 commitRename()
             }
         }
+        .sheet(isPresented: $isSavingRecipe) {
+            SaveRecipeSheet { selectedID = $0.id }
+                .environment(model)
+        }
         .confirmationDialog(
             "Delete “\(selectedRecipe?.name ?? "")”?",
             isPresented: $isConfirmingDelete,
@@ -64,7 +71,7 @@ struct RecipeManagerView: View {
             Section("My Recipes") {
                 ForEach(model.savedRecipes) { recipe in
                     HStack(spacing: 10) {
-                        MiniCanister(name: recipe.name, height: 26)
+                        MiniCanister(recipe: recipe, height: 26)
                         Text(recipe.name)
                             .lineLimit(1)
                         Spacer(minLength: 4)
@@ -89,7 +96,36 @@ struct RecipeManagerView: View {
         if let recipe = selectedRecipe {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 14) {
-                    MiniCanister(name: draftName.isEmpty ? recipe.name : draftName, height: 54)
+                    Button {
+                        isChoosingCanister = true
+                    } label: {
+                        MiniCanister(recipe: previewRecipe(recipe), height: 54)
+                            .padding(6)
+                            .background(
+                                .quaternary.opacity(isHoveringCanister ? 0.8 : 0.35),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "paintbrush.pointed.fill")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 17, height: 17)
+                                    .background(Color.accentColor, in: Circle())
+                                    .overlay(Circle().strokeBorder(.background, lineWidth: 1.5))
+                                    .offset(x: 5, y: 5)
+                            }
+                            .scaleEffect(isHoveringCanister ? 1.04 : 1)
+                            .animation(.easeOut(duration: 0.12), value: isHoveringCanister)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { isHoveringCanister = $0 }
+                    .help("Choose a canister for this recipe")
+                    .accessibilityLabel("Canister: \(CanisterDesign.resolved(for: recipe).name)")
+                    .popover(isPresented: $isChoosingCanister, arrowEdge: .bottom) {
+                        CanisterPicker(recipe: previewRecipe(recipe)) { design in
+                            model.setCanister(design.id, forRecipe: recipe.id)
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 2) {
                         TextField("Recipe Name", text: $draftName)
@@ -100,6 +136,11 @@ struct RecipeManagerView: View {
                         Text(renameError ?? (isInUse(recipe) ? "In use" : "Saved recipe"))
                             .font(.caption)
                             .foregroundStyle(renameError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                        Button("Change Canister…") {
+                            isChoosingCanister = true
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption)
                     }
 
                     Spacer(minLength: 8)
@@ -192,8 +233,7 @@ struct RecipeManagerView: View {
     private var footer: some View {
         HStack(spacing: 2) {
             Button {
-                model.saveCurrentAsRecipe()
-                selectedID = model.isSelectedRecipeCustom ? model.selectedRecipeID : selectedID
+                isSavingRecipe = true
             } label: {
                 Image(systemName: "plus")
                     .frame(width: 22, height: 20)
@@ -229,6 +269,16 @@ struct RecipeManagerView: View {
         return model.savedRecipes.first { $0.id == selectedID }
     }
 
+    /// The recipe as its canister should read while the name is being edited.
+    private func previewRecipe(_ recipe: FilmRecipe) -> FilmRecipe {
+        var preview = recipe
+        let name = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            preview.name = name
+        }
+        return preview
+    }
+
     private func isInUse(_ recipe: FilmRecipe) -> Bool {
         recipe.id == model.selectedRecipeID && !model.isRecipeModified
     }
@@ -259,14 +309,48 @@ struct RecipeManagerView: View {
     }
 }
 
-/// A saved recipe's bulk-loaded canister, with its name on the tape, as a small glyph.
-private struct MiniCanister: View {
+/// A saved recipe's canister, with its name printed on it, as a small glyph.
+struct MiniCanister: View {
+    let style: CanisterStyle
     let name: String
     let height: CGFloat
 
+    init(recipe: FilmRecipe, design: CanisterDesign? = nil, height: CGFloat) {
+        style = design.map { CanisterStyle(design: $0, recipe: recipe) }
+            ?? CanisterStyle(recipe: recipe, isModified: false)
+        name = recipe.name
+        self.height = height
+    }
+
     var body: some View {
-        FilmCanisterView(style: .bulk(name), recipeName: name, height: height)
+        FilmCanisterView(style: style, recipeName: name, height: height)
             .frame(width: CanisterGeometry.width * height / CanisterGeometry.height + 2, height: height)
             .accessibilityHidden(true)
+    }
+}
+
+/// The canister library in a popover, for a recipe that's already saved.
+private struct CanisterPicker: View {
+    let recipe: FilmRecipe
+    let onChoose: (CanisterDesign) -> Void
+
+    private var current: CanisterDesign { CanisterDesign.resolved(for: recipe) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Canister")
+                    .font(.headline)
+                Spacer()
+                Button("Shuffle", systemImage: "shuffle") {
+                    if let design = CanisterDesign.automatic.filter({ $0 != current }).randomElement() {
+                        onChoose(design)
+                    }
+                }
+                .controlSize(.small)
+            }
+            CanisterGrid(recipe: recipe, selection: current, onChoose: onChoose)
+        }
+        .padding(14)
     }
 }

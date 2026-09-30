@@ -66,6 +66,25 @@ import Testing
     #expect(decoded == recipe)
 }
 
+@Test func recipeCanistersRoundTripAndDefaultToAutomatic() throws {
+    let legacy = try JSONDecoder().decode(FilmRecipe.self, from: JSONEncoder().encode(LegacyFilmRecipe(
+        id: "legacy",
+        name: "Legacy Recipe",
+        tone: .init(isEnabled: false),
+        lightShaping: .init(isEnabled: false),
+        lensBlur: .init(isEnabled: false),
+        diffusion: .init(isEnabled: false),
+        halation: .init(isEnabled: false),
+        grain: .init(isEnabled: false)
+    )))
+    #expect(legacy.canister == nil)
+
+    var recipe = FilmRecipe.classic35
+    recipe.canister = "ember"
+    let decoded = try JSONDecoder().decode(FilmRecipe.self, from: JSONEncoder().encode(recipe))
+    #expect(decoded.canister == "ember")
+}
+
 @Test func classic35UsesTheCIHBalance() {
     let recipe = FilmRecipe.classic35
 

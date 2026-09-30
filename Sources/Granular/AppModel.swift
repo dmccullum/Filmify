@@ -94,6 +94,7 @@ final class AppModel {
     var selectedRecipeID = FilmRecipe.classic35.id
     var savedRecipes: [FilmRecipe] = []
     var showRecipeManager = false
+    var isSavingRecipe = false
     var showOriginal = false
     var activeCenterTarget: EffectCenterTarget?
     var isDropTargeted = false
@@ -337,30 +338,31 @@ final class AppModel {
         schedulePreview()
     }
 
-    func saveCurrentAsRecipe() {
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        field.placeholderString = "Recipe name"
-        field.stringValue = isSelectedRecipeCustom ? recipe.name : "My Recipe"
+    /// Asks for a name and canister for the current settings.
+    func beginSavingRecipe() {
+        isSavingRecipe = true
+    }
 
-        let alert = NSAlert()
-        alert.messageText = "Save Film Recipe"
-        alert.informativeText = "This saves every adjustment and the global strength."
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
+    /// The name offered when saving: the recipe being edited, if it's one of ours.
+    var suggestedRecipeName: String {
+        isSelectedRecipeCustom ? recipe.name : "My Recipe"
+    }
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
+    /// Saves the current settings as a new recipe and puts it to use.
+    @discardableResult
+    func saveCurrentAsRecipe(named proposedName: String, canister: String) -> FilmRecipe? {
+        let name = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
 
         var recipe = recipe
         recipe.id = "custom-\(UUID().uuidString)"
         recipe.name = name
+        recipe.canister = canister
         savedRecipes.append(recipe)
         persistRecipes()
         selectRecipe(recipe)
         statusMessage = "Saved recipe “\(name)”"
+        return recipe
     }
 
     func updateSelectedRecipe() {
@@ -368,6 +370,7 @@ final class AppModel {
         var updated = recipe
         updated.id = savedRecipes[index].id
         updated.name = savedRecipes[index].name
+        updated.canister = savedRecipes[index].canister
         savedRecipes[index] = updated
         recipe = updated
         persistRecipes()
@@ -407,6 +410,17 @@ final class AppModel {
         persistRecipes()
         statusMessage = "Renamed recipe to “\(name)”"
         return true
+    }
+
+    /// Packages a saved recipe in a canister from the library.
+    func setCanister(_ canister: String, forRecipe id: String) {
+        guard let index = savedRecipes.firstIndex(where: { $0.id == id }) else { return }
+        savedRecipes[index].canister = canister
+        if selectedRecipeID == id {
+            recipe.canister = canister
+            persistRecipeSelection()
+        }
+        persistRecipes()
     }
 
     func deleteRecipe(id: String) {
