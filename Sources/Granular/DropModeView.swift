@@ -15,7 +15,9 @@ struct DropModeView: View {
     /// Film loading, played when Instant mode settles and reversed when leaving it.
     @State private var isCanisterSeated = false
     @State private var filmOut: CGFloat = 0
+    @FocusState private var isStripFocused: Bool
     private var roll: FilmRoll { .shared }
+    private var preview: FramePreviewController { .shared }
 
     private struct Exposure: Equatable {
         let jobID: UUID
@@ -32,8 +34,13 @@ struct DropModeView: View {
             FilmChamber(
                 style: CanisterStyle(recipe: model.currentRecipe, isModified: model.isRecipeModified),
                 recipeName: model.recipeDisplayName,
-                gate: exposure.map { GateExposure(id: $0.jobID, image: roll.thumbnails[$0.jobID]?.image) },
+                gate: exposure.map { exposure in
+                    let isSpoiled = if case .failed = model.job(exposure.jobID)?.state { true } else { false }
+                    return GateExposure(id: exposure.jobID, image: roll.thumbnails[exposure.jobID]?.image, isSpoiled: isSpoiled)
+                },
                 frames: exposedFrames,
+                selectedFrameID: roll.selectedFrameID,
+                isStripFocused: isStripFocused,
                 advance: advance,
                 isAdvancing: isAdvancing,
                 framesWound: roll.framesWound,
@@ -43,8 +50,39 @@ struct DropModeView: View {
                 reduceMotion: reduceMotion,
                 onCanister: { RecipeMenuPresenter.popUp(model: model) },
                 onChoose: { model.chooseImagesForDroplet() },
-                onReveal: { model.reveal($0) }
+                onSelect: { selectFrame($0) }
             )
+            .focusable(!exposedFrames.isEmpty)
+            .focused($isStripFocused)
+            .focusEffectDisabled()
+            .onKeyPress(.space) {
+                guard roll.selectedFrameID != nil else { return .ignored }
+                preview.togglePanel()
+                return .handled
+            }
+            .onKeyPress(.leftArrow) {
+                preview.moveSelection(by: -1)
+                return .handled
+            }
+            .onKeyPress(.rightArrow) {
+                preview.moveSelection(by: 1)
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                guard roll.selectedFrameID != nil else { return .ignored }
+                roll.selectedFrameID = nil
+                return .handled
+            }
+            .onKeyPress(keys: [.delete]) { press in
+                guard press.modifiers == .command, let selected = roll.selectedFrameID else { return .ignored }
+                model.moveOutputToTrash(of: selected)
+                return .handled
+            }
+            .onCopyCommand {
+                guard let url = exposedFrames.first(where: { $0.id == roll.selectedFrameID })?.outputURL,
+                      let provider = NSItemProvider(contentsOf: url) else { return [] }
+                return [provider]
+            }
             .padding(.horizontal, 10)
             .padding(.top, 2)
 
@@ -53,8 +91,11 @@ struct DropModeView: View {
         .background(AlloySurface().ignoresSafeArea())
         .contentShape(Rectangle())
         .dropDestination(for: URL.self) { urls, _ in
+            // A frame dragged off the strip and let go over the window stays put.
+            let urls = urls.filter { !model.isInstantOutput($0) }
+            guard !urls.isEmpty else { return false }
             Task { await model.processInstantly(urls) }
-            return !urls.isEmpty
+            return true
         } isTargeted: { targeted in
             withAnimation(.easeOut(duration: 0.16)) {
                 model.isDropTargeted = targeted
@@ -62,6 +103,12 @@ struct DropModeView: View {
         }
         .onChange(of: LeadJobKey(id: model.jobs.first?.id, state: model.jobs.first?.state)) { _, _ in
             leadJobChanged()
+        }
+        .onChange(of: exposedFrames, initial: true) { _, frames in
+            framesChanged(frames)
+        }
+        .onChange(of: roll.selectedFrameID) { _, _ in
+            preview.selectionDidChange()
         }
         .onAppear {
             if model.isFilmLoaded {
@@ -115,11 +162,43 @@ struct DropModeView: View {
 
     private var exposedFrames: [ExposedFrame] {
         model.jobs.compactMap { job -> ExposedFrame? in
-            guard case .finished(let outputURL) = job.state, job.id != exposure?.jobID else { return nil }
-            return ExposedFrame(id: job.id, image: roll.thumbnails[job.id]?.image, outputURL: outputURL)
+            guard job.id != exposure?.jobID else { return nil }
+            let development: ExposedFrame.Development
+            switch job.state {
+            case .finished(let outputURL): development = .developed(outputURL)
+            case .failed(let message): development = .spoiled(message)
+            case .queued, .processing: return nil
+            }
+            return ExposedFrame(
+                id: job.id,
+                image: roll.thumbnails[job.id]?.image,
+                sourceURL: job.sourceURL,
+                development: development
+            )
         }
         .prefix(4)
         .map { $0 }
+    }
+
+    /// Clicking a frame selects it and gives the strip keyboard focus, for
+    /// Space to Quick Look and the arrow keys to move along the film.
+    private func selectFrame(_ id: UUID) {
+        roll.selectedFrameID = id
+        isStripFocused = true
+    }
+
+    private func framesChanged(_ frames: [ExposedFrame]) {
+        preview.frames = frames.map { frame in
+            PreviewFrame(id: frame.id, url: frame.outputURL ?? frame.sourceURL, image: frame.image)
+        }
+        if let selected = roll.selectedFrameID, !frames.contains(where: { $0.id == selected }) {
+            roll.selectedFrameID = nil
+        }
+        // A frame trashed from the strip lets an older one back on, which may
+        // have lost its thumbnail along the way.
+        for frame in frames where frame.image == nil && !roll.loading.contains(frame.id) {
+            loadThumbnail(from: frame.outputURL ?? frame.sourceURL, for: frame.id)
+        }
     }
 
     private func leadJobChanged() {
@@ -137,9 +216,8 @@ struct DropModeView: View {
             loadThumbnail(from: output, for: job.id)
             advanceFilm(after: job.id)
         case .failed:
-            if exposure?.jobID == job.id {
-                withAnimation(.easeOut(duration: 0.3)) { exposure = nil }
-            }
+            // The spoiled frame fogs in the gate, then winds on like any other.
+            advanceFilm(after: job.id)
         }
     }
 
@@ -178,9 +256,11 @@ struct DropModeView: View {
     }
 
     private func loadThumbnail(from url: URL, for jobID: UUID) {
+        roll.loading.insert(jobID)
         Task {
+            defer { roll.loading.remove(jobID) }
             guard let thumbnail = await FilmThumbnail.load(url) else { return }
-            let visible = Set(model.jobs.prefix(6).map(\.id))
+            let visible = Set(model.jobs.prefix(6).map(\.id)).union(exposedFrames.map(\.id))
             roll.thumbnails[jobID] = thumbnail
             roll.thumbnails = roll.thumbnails.filter { visible.contains($0.key) }
         }
@@ -198,6 +278,9 @@ final class FilmRoll {
     var thumbnails: [UUID: FilmThumbnail] = [:]
     /// How many frames have been wound on, so the edge numbers travel with the film.
     var framesWound = 0
+    /// The frame marked on the strip, for Quick Look and the context actions.
+    var selectedFrameID: UUID?
+    @ObservationIgnored var loading: Set<UUID> = []
 }
 
 struct FilmThumbnail: @unchecked Sendable {
@@ -226,12 +309,26 @@ struct FilmThumbnail: @unchecked Sendable {
 struct GateExposure: Equatable {
     let id: UUID
     let image: CGImage?
+    /// The image failed, so the exposure fogs instead of burning in.
+    var isSpoiled = false
 }
 
 struct ExposedFrame: Identifiable, Equatable {
+    enum Development: Equatable {
+        case developed(URL)
+        /// Light-struck: processing failed, with the reason.
+        case spoiled(String)
+    }
+
     let id: UUID
     let image: CGImage?
-    let outputURL: URL
+    let sourceURL: URL
+    let development: Development
+
+    var outputURL: URL? {
+        if case .developed(let url) = development { return url }
+        return nil
+    }
 }
 
 // MARK: - Chamber
@@ -241,6 +338,8 @@ private struct FilmChamber: View {
     let recipeName: String
     let gate: GateExposure?
     let frames: [ExposedFrame]
+    let selectedFrameID: UUID?
+    let isStripFocused: Bool
     let advance: CGFloat
     let isAdvancing: Bool
     let framesWound: Int
@@ -250,7 +349,7 @@ private struct FilmChamber: View {
     let reduceMotion: Bool
     let onCanister: () -> Void
     let onChoose: () -> Void
-    let onReveal: (URL) -> Void
+    let onSelect: (UUID) -> Void
 
     var body: some View {
         GeometryReader { geometry in
@@ -300,13 +399,15 @@ private struct FilmChamber: View {
                     recipeName: recipeName,
                     gate: gate,
                     frames: frames,
+                    selectedFrameID: selectedFrameID,
+                    isStripFocused: isStripFocused,
                     advance: advance,
                     isAdvancing: isAdvancing,
                     framesWound: framesWound,
                     isTargeted: isTargeted,
                     reduceMotion: reduceMotion,
                     onChoose: onChoose,
-                    onReveal: onReveal
+                    onSelect: onSelect
                 )
                 .frame(width: stripWidth, height: stripHeight)
                 // Loading: the film slides out of the canister's lip toward the take-up.
@@ -476,13 +577,15 @@ private struct FilmStrip: View {
     let recipeName: String
     let gate: GateExposure?
     let frames: [ExposedFrame]
+    let selectedFrameID: UUID?
+    let isStripFocused: Bool
     let advance: CGFloat
     let isAdvancing: Bool
     let framesWound: Int
     let isTargeted: Bool
     let reduceMotion: Bool
     let onChoose: () -> Void
-    let onReveal: (URL) -> Void
+    let onSelect: (UUID) -> Void
 
     private let curlAngles: [Double] = stride(from: 4.0, through: 88, by: 4).map { $0 }
 
@@ -605,7 +708,12 @@ private struct FilmStrip: View {
 
                     Group {
                         if let gate, isPrimary {
-                            ExposureBurn(image: gate.image, reduceMotion: reduceMotion)
+                            ExposureBurn(
+                                image: gate.image,
+                                isSpoiled: gate.isSpoiled,
+                                seed: FoggedFrame.seed(for: gate.id),
+                                reduceMotion: reduceMotion
+                            )
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                                 .accessibilityLabel("Exposing image")
                         } else {
@@ -615,19 +723,15 @@ private struct FilmStrip: View {
                     .frame(width: slot.width, height: slot.height)
 
                     ForEach(frames) { frame in
-                        Button {
-                            onReveal(frame.outputURL)
-                        } label: {
-                            NegativeFrame(image: frame.image)
-                                .frame(width: slot.width, height: slot.height)
-                                .clipShape(RoundedRectangle(cornerRadius: 2))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .pointerStyle(.link)
-                        .help("Show in Finder")
-                        .accessibilityLabel(frame.outputURL.lastPathComponent)
-                        .accessibilityHint("Shows the processed image in Finder")
+                        StripFrame(
+                            frame: frame,
+                            size: slot,
+                            isSelected: frame.id == selectedFrameID,
+                            isStripFocused: isStripFocused,
+                            // The curl only repeats the film to look at.
+                            isInteractive: isPrimary,
+                            onSelect: { onSelect(frame.id) }
+                        )
                     }
 
                     ForEach(0..<blankCount, id: \.self) { _ in
@@ -759,6 +863,296 @@ private struct NegativeImage: View {
     }
 }
 
+/// A spoiled frame: light got to it, so where the image should be there’s
+/// an amber fog washing in from the edge. The failure itself is in its tooltip.
+private struct FoggedFrame: View {
+    let image: CGImage?
+    let seed: UInt64
+
+    /// The same frame fogs the same way in the gate and on the strip.
+    static func seed(for id: UUID) -> UInt64 {
+        UInt64(truncatingIfNeeded: id.hashValue)
+    }
+
+    var body: some View {
+        ZStack {
+            Color(hex: 0x2B1C13)
+            if let image {
+                NegativeImage(image: image)
+                    .opacity(0.3)
+            }
+            LinearGradient(
+                stops: [
+                    .init(color: Color(hex: 0xFFD7A0, opacity: 0.9), location: 0),
+                    .init(color: Color(hex: 0xFF8A3D, opacity: 0.72), location: 0.24),
+                    .init(color: Color(hex: 0xE2471B, opacity: 0.42), location: 0.52),
+                    .init(color: Color(hex: 0x7A2410, opacity: 0.18), location: 0.8),
+                    .init(color: Color(hex: 0x7A2410, opacity: 0), location: 1)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // Uneven blooms, so it reads as light leaking in rather than a gradient.
+            Canvas { context, size in
+                var generator = SeededGenerator(seed: seed)
+                let bloom = Color(hex: 0xFFC98A)
+                for _ in 0..<6 {
+                    let radius = CGFloat.random(in: 0.25...0.6, using: &generator) * size.height
+                    let center = CGPoint(
+                        x: CGFloat.random(in: 0...size.width, using: &generator),
+                        y: CGFloat.random(in: 0...size.height, using: &generator)
+                    )
+                    let circle = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+                    context.fill(
+                        Path(ellipseIn: circle),
+                        with: .radialGradient(
+                            Gradient(colors: [bloom.opacity(0.3), bloom.opacity(0)]),
+                            center: center,
+                            startRadius: 0,
+                            endRadius: radius
+                        )
+                    )
+                }
+            }
+            .blendMode(.screen)
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color(hex: 0xFFECDC, opacity: 0.85))
+                .shadow(color: .black.opacity(0.5), radius: 2)
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            RoundedRectangle(cornerRadius: 2)
+                .strokeBorder(.black.opacity(0.35), lineWidth: 1)
+        }
+        .compositingGroup()
+    }
+}
+
+/// A frame on the strip. Click marks it, double-click opens the processed
+/// image, drag takes the file elsewhere, and right-click has the rest.
+private struct StripFrame: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.controlActiveState) private var controlActiveState
+    let frame: ExposedFrame
+    let size: CGSize
+    let isSelected: Bool
+    let isStripFocused: Bool
+    let isInteractive: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        if isInteractive {
+            face
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    model.openOutput(of: frame.id)
+                }
+                .simultaneousGesture(TapGesture().onEnded { onSelect() })
+                .modifier(OutputDrag(url: frame.outputURL, image: frame.image, size: size))
+                .contextMenu {
+                    FrameContextMenu(frame: frame)
+                }
+                .help(helpText)
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .global)
+                } action: { rect in
+                    FramePreviewController.shared.frameRects[frame.id] = rect
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                .accessibilityAction { onSelect() }
+                .accessibilityActions {
+                    if frame.outputURL != nil {
+                        Button("Open") { model.openOutput(of: frame.id) }
+                        Button("Show in Finder") { model.reveal(frame.outputURL) }
+                    } else {
+                        Button("Retry") { model.retryJob(frame.id) }
+                    }
+                }
+        } else {
+            face
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var face: some View {
+        ZStack {
+            switch frame.development {
+            case .developed:
+                NegativeFrame(image: frame.image)
+            case .spoiled:
+                FoggedFrame(image: frame.image, seed: FoggedFrame.seed(for: frame.id))
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+        // On a light table, the marked frame is the one lit from beneath.
+        .brightness(isSelected ? 0.07 : 0)
+        .overlay {
+            if isSelected {
+                GreasePencilMark(isEmphasized: isStripFocused && controlActiveState != .inactive)
+                    .padding(-4)
+            }
+        }
+    }
+
+    private var helpText: String {
+        switch frame.development {
+        case .developed(let url):
+            "\(url.lastPathComponent) — double-click to open, or drag it out"
+        case .spoiled(let message):
+            "Couldn’t process \(frame.sourceURL.lastPathComponent): \(message)"
+        }
+    }
+
+    private var accessibilityLabel: String {
+        switch frame.development {
+        case .developed(let url): url.lastPathComponent
+        case .spoiled: "\(frame.sourceURL.lastPathComponent), failed"
+        }
+    }
+}
+
+/// The marked frame, ringed as with a china marker on a contact sheet: in
+/// signal red while the strip has focus, faded when it doesn’t.
+private struct GreasePencilMark: View {
+    let isEmphasized: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4, style: .continuous)
+            .strokeBorder(
+                isEmphasized ? FilmBackPalette.signal : Color(hex: 0xB3B8BB, opacity: 0.6),
+                style: StrokeStyle(lineWidth: 2.25, lineCap: .round, lineJoin: .round)
+            )
+            .shadow(color: isEmphasized ? FilmBackPalette.signal.opacity(0.55) : .clear, radius: 5)
+            .allowsHitTesting(false)
+    }
+}
+
+/// Drags the processed file out, lifting off the strip as a small print.
+private struct OutputDrag: ViewModifier {
+    let url: URL?
+    let image: CGImage?
+    let size: CGSize
+
+    func body(content: Content) -> some View {
+        if let url {
+            content.onDrag {
+                NSItemProvider(contentsOf: url) ?? NSItemProvider()
+            } preview: {
+                ZStack {
+                    Color(hex: 0x2B1C13)
+                    if let image {
+                        Image(decorative: image, scale: 1)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                }
+                .frame(width: size.width, height: size.height)
+                .clipped()
+                .padding(4)
+                .background(Color(hex: 0xF4EFE6))
+            }
+        } else {
+            content
+        }
+    }
+}
+
+private struct FrameContextMenu: View {
+    @Environment(AppModel.self) private var model
+    let frame: ExposedFrame
+
+    var body: some View {
+        switch frame.development {
+        case .developed(let url):
+            Button("Open") {
+                model.openOutput(of: frame.id)
+            }
+            OpenWithMenu(url: url) { application in
+                model.openOutput(of: frame.id, withApplicationAt: application)
+            }
+            Divider()
+            Button("Show in Finder") {
+                model.reveal(url)
+            }
+            Button("Copy") {
+                model.copyOutput(of: frame.id)
+            }
+            ShareLink(item: url)
+            Divider()
+            Button("Open in Edit Mode") {
+                model.openSourceInEditMode(of: frame.id)
+            }
+            Divider()
+            Button("Move to Trash") {
+                model.moveOutputToTrash(of: frame.id)
+            }
+        case .spoiled:
+            Button("Retry") {
+                model.retryJob(frame.id)
+            }
+            Divider()
+            Button("Open in Edit Mode") {
+                model.openSourceInEditMode(of: frame.id)
+            }
+            Button("Show Original in Finder") {
+                model.revealSource(of: frame.id)
+            }
+        }
+    }
+}
+
+/// The apps that can open a file, its default first, as in Finder.
+private struct OpenWithMenu: View {
+    let url: URL
+    let open: (URL) -> Void
+
+    var body: some View {
+        Menu("Open With") {
+            let workspace = NSWorkspace.shared
+            let defaultApplication = workspace.urlForApplication(toOpen: url)
+            let others = workspace.urlsForApplications(toOpen: url)
+                .filter { $0 != defaultApplication }
+                .sorted { name(of: $0).localizedStandardCompare(name(of: $1)) == .orderedAscending }
+            if let defaultApplication {
+                item(for: defaultApplication, title: "\(name(of: defaultApplication)) (default)")
+                if !others.isEmpty {
+                    Divider()
+                }
+            }
+            ForEach(others, id: \.self) { application in
+                item(for: application, title: name(of: application))
+            }
+        }
+    }
+
+    private func item(for application: URL, title: String) -> some View {
+        Button {
+            open(application)
+        } label: {
+            Label {
+                Text(title)
+            } icon: {
+                Image(nsImage: icon(of: application))
+            }
+        }
+    }
+
+    private func name(of application: URL) -> String {
+        let name = FileManager.default.displayName(atPath: application.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    private func icon(of application: URL) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: application.path)
+        icon.size = NSSize(width: 16, height: 16)
+        return icon
+    }
+}
+
 /// The fixed aperture the film runs under: the drop target and its prompt.
 private struct FilmGate: View {
     let isEmpty: Bool
@@ -834,6 +1228,8 @@ private struct GateButtonBody: View {
 /// settles into the film as a toned, mirrored negative.
 private struct ExposureBurn: View {
     let image: CGImage?
+    let isSpoiled: Bool
+    let seed: UInt64
     let reduceMotion: Bool
     @State private var positive = 1.0
     @State private var flash = 1.0
@@ -854,8 +1250,13 @@ private struct ExposureBurn: View {
                     .scaleEffect(x: -1, y: 1)
                     .opacity(positive)
             }
+            if isSpoiled {
+                FoggedFrame(image: image, seed: seed)
+                    .transition(.opacity)
+            }
             Color(hex: 0xFFFAF2).opacity(flash)
         }
+        .animation(reduceMotion ? nil : .easeIn(duration: 0.5), value: isSpoiled)
         .onAppear {
             if reduceMotion {
                 flash = 0
@@ -882,17 +1283,7 @@ private struct FilmBackStatusBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            HStack(spacing: 7) {
-                Image(systemName: "folder")
-                Text(model.dropOutputFolder?.lastPathComponent ?? "Choose output folder")
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                Button("Change…") {
-                    model.chooseDropOutputFolder()
-                }
-                .buttonStyle(.link)
-            }
-            .engraved()
+            OutputFolderPopUp()
 
             Spacer(minLength: 20)
 
@@ -902,6 +1293,16 @@ private struct FilmBackStatusBar: View {
                     .foregroundStyle(.orange)
                     .lineLimit(1)
                     .help(message)
+            }
+
+            // A lone image needs no count; a batch reads off “3 of 12”.
+            if let batch = model.displayedBatch, batch.progress.total > 1 {
+                BatchCounter(
+                    progress: batch.progress,
+                    canCancel: !batch.isWatched && model.canCancelProcessing,
+                    onCancel: model.cancelInstantProcessing
+                )
+                .transition(.opacity)
             }
 
             HStack(spacing: 6) {
@@ -915,20 +1316,144 @@ private struct FilmBackStatusBar: View {
                     .shadow(color: FilmBackPalette.counter.opacity(0.55), radius: 4)
                     .padding(.horizontal, 7)
                     .frame(minWidth: 38, minHeight: 22)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color(hex: 0x0D0D0D))
-                            .shadow(color: .white.opacity(0.7), radius: 0, y: 1)
-                    )
+                    .background(CounterWindow())
                     .contentTransition(.numericText())
                     .animation(.snappy, value: model.completedJobCount)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(model.completedJobCount) images processed")
         }
+        .animation(.easeOut(duration: 0.2), value: (model.displayedBatch?.progress.total ?? 0) > 1)
         .font(.caption)
         .padding(.horizontal, 16)
         .frame(height: 42)
     }
 }
 
+/// The dark window the counters read through, lit along its lower lip.
+private struct CounterWindow: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(Color(hex: 0x0D0D0D))
+            .shadow(color: .white.opacity(0.7), radius: 0, y: 1)
+    }
+}
+
+/// “3 of 12” stamped beside the EXP counter while a batch runs, with a
+/// recessed stop button that finishes the frame in the gate and goes no further.
+private struct BatchCounter: View {
+    let progress: ProcessingBatch
+    let canCancel: Bool
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(progress.isCancelled ? "Stopping…" : "\(progress.position) of \(progress.total)")
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .contentTransition(.numericText())
+                .animation(.snappy, value: progress.position)
+                .engraved()
+                .accessibilityLabel(
+                    progress.isCancelled
+                        ? "Stopping after this image"
+                        : "Processing image \(progress.position) of \(progress.total)"
+                )
+
+            if canCancel {
+                Button(action: onCancel) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                .buttonStyle(RecessedButtonStyle())
+                .keyboardShortcut(.cancelAction)
+                .help("Cancel processing after this image")
+                .accessibilityLabel("Cancel Processing")
+            }
+        }
+    }
+}
+
+/// A small round button sunk into the metal, its glyph lit like the counter.
+private struct RecessedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        RecessedButtonBody(configuration: configuration)
+    }
+}
+
+private struct RecessedButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    @State private var isHovering = false
+
+    var body: some View {
+        configuration.label
+            .foregroundStyle(FilmBackPalette.counter.opacity(isHovering || configuration.isPressed ? 1 : 0.8))
+            .shadow(color: FilmBackPalette.counter.opacity(isHovering ? 0.7 : 0.4), radius: 3)
+            .frame(width: 18, height: 18)
+            .background(
+                Circle()
+                    .fill(Color(hex: configuration.isPressed ? 0x050505 : 0x0D0D0D))
+                    .shadow(color: .white.opacity(0.7), radius: 0, y: 1)
+            )
+            .contentShape(Circle())
+            .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.15), value: isHovering)
+    }
+}
+
+/// The Instant output folder as a path pop-up stamped into the footer. Its
+/// menu lists recent folders, then Choose… and Show in Finder.
+private struct OutputFolderPopUp: View {
+    @Environment(AppModel.self) private var model
+    @State private var anchor = MenuAnchor()
+
+    var body: some View {
+        Button {
+            OutputFolderMenu.popUp(model: model, from: anchor.view)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                Text(model.dropOutputFolder?.lastPathComponent ?? "Choose Output Folder")
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 7.5, weight: .bold))
+                    .opacity(0.8)
+            }
+        }
+        .buttonStyle(FooterPopUpButtonStyle())
+        .background(MenuAnchorView(anchor: anchor))
+        .help(model.dropOutputFolder.map { "Saving to \($0.path(percentEncoded: false))" } ?? "Choose where processed images are saved")
+        .accessibilityLabel("Output Folder")
+        .accessibilityValue(model.dropOutputFolder?.lastPathComponent ?? "None")
+        .accessibilityHint("Shows recent folders and lets you choose another")
+    }
+}
+
+/// Stamped lettering that sinks slightly into the metal under the pointer.
+private struct FooterPopUpButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        FooterPopUpBody(configuration: configuration)
+    }
+}
+
+private struct FooterPopUpBody: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isHovering = false
+
+    var body: some View {
+        let shade: Color = colorScheme == .dark ? .black : Color(hex: 0x3F4347)
+        configuration.label
+            .engraved()
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(shade.opacity(configuration.isPressed ? 0.18 : isHovering ? 0.09 : 0))
+                    .shadow(color: .white.opacity(isHovering && colorScheme == .light ? 0.6 : 0), radius: 0, y: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.15), value: isHovering)
+    }
+}

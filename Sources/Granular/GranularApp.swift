@@ -7,6 +7,10 @@ extension Notification.Name {
 }
 
 final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        ProcessingNotifier.shared.becomeDelegate()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         NotificationCenter.default.post(name: .granularOpenURLs, object: urls)
     }
@@ -37,6 +41,7 @@ struct GranularDesktopApp: App {
 
             FileCommands(model: model)
             RecipeCommands(model: model)
+            InstantCommands(model: model)
         }
 
         Settings {
