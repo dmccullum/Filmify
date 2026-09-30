@@ -39,6 +39,7 @@ extension AppModel {
         func isMain(_ window: NSWindow) -> Bool {
             window.isVisible && window.canBecomeMain && !(window is NSPanel)
                 && window.identifier?.rawValue.localizedCaseInsensitiveContains("settings") != true
+                && !isRecipeLibraryWindow(window)
         }
         if let key = NSApplication.shared.keyWindow, isMain(key) { return key }
         return NSApplication.shared.windows.first(where: isMain)

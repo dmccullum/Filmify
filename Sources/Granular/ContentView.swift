@@ -71,10 +71,8 @@ struct ContentView: View {
         .onAppear {
             model.scheduleWindowResize(for: model.operationMode, animated: false)
         }
-        .sheet(isPresented: $model.showRecipeManager) {
-            RecipeManagerView()
-                .environment(model)
-        }
+        .openingRecipeLibrary()
+        .confirmingRecipeDeletion(in: .main)
         .sheet(isPresented: $model.isSavingRecipe) {
             SaveRecipeSheet()
                 .environment(model)
@@ -256,11 +254,11 @@ final class RecipeMenuController: NSObject {
     }
 
     @objc private func deleteRecipe() {
-        model.deleteSelectedRecipe()
+        model.requestDeletingCurrentRecipe()
     }
 
     @objc private func manageRecipes() {
-        model.showRecipeManager = true
+        model.showRecipeLibrary()
     }
 
     private func makeMenu() -> NSMenu {
@@ -307,7 +305,7 @@ final class RecipeMenuController: NSObject {
         }
 
         menu.addItem(.separator())
-        addAction("Manage Recipes…", symbol: "list.bullet", action: #selector(manageRecipes), to: menu)
+        addAction("Recipe Library…", symbol: "film.stack", action: #selector(manageRecipes), to: menu)
         return menu
     }
 
