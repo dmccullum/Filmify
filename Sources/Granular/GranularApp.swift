@@ -23,7 +23,15 @@ final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        NotificationCenter.default.post(name: .granularOpenURLs, object: urls)
+        // Recipe files join the Recipe Library; everything else is an image.
+        let recipeFiles = urls.filter(RecipeFile.isRecipeFile)
+        if !recipeFiles.isEmpty {
+            RecipeFileInbox.receive(recipeFiles)
+        }
+        let images = urls.filter { !RecipeFile.isRecipeFile($0) }
+        if !images.isEmpty {
+            NotificationCenter.default.post(name: .granularOpenURLs, object: images)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -85,6 +93,15 @@ struct GranularDesktopApp: App {
             InstantCommands(model: model)
             HelpCommands()
         }
+
+        Window("Recipe Library", id: RecipeLibraryView.windowID) {
+            RecipeLibraryView()
+                .environment(model)
+        }
+        .defaultSize(width: 800, height: 520)
+        .windowResizability(.contentMinSize)
+        // Opens where it was last left, but only when asked for.
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView()

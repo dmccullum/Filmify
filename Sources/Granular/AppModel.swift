@@ -202,6 +202,15 @@ final class AppModel {
 
     // MARK: Recipe library state
     // Keep each area's new stored state under its own mark.
+    /// The recipe shown in the Recipe Library window.
+    var recipeLibrarySelection: String?
+    /// A deletion waiting to be confirmed, and the window asking.
+    var recipeDeletionRequest: RecipeDeletionRequest?
+    /// An import or export that went wrong, shown in the Recipe Library.
+    var recipeLibraryAlert: RecipeLibraryAlert?
+    /// The Recipe Library's window while it's open: its own undo manager
+    /// keeps the library's steps, and its sheets appear there.
+    @ObservationIgnored weak var recipeLibraryWindow: NSWindow?
 
     // MARK: System integration state
     // Keep each area's new stored state under its own mark.
