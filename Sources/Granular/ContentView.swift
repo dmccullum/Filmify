@@ -44,6 +44,16 @@ struct ContentView: View {
         }
         .toolbarBackgroundVisibility(showsCameraBody || model.isSettlingWindow ? .hidden : .automatic, for: .windowToolbar)
         .toolbar(removing: showsCameraBody ? .title : nil)
+        // In Edit mode the window stands for the open image: its name and
+        // proxy icon, with the recipe beneath. Instant mode keeps its nameplate.
+        .navigationTitle(model.editorWindowTitle)
+        .navigationSubtitle(model.editorWindowSubtitle)
+        .background {
+            if model.operationMode == .edit, let url = model.selectedSourceURL {
+                Color.clear
+                    .navigationDocument(url)
+            }
+        }
         .toolbar {
             if showsCameraBody {
                 ToolbarItem(placement: .principal) {
@@ -69,6 +79,10 @@ struct ContentView: View {
             SaveRecipeSheet()
                 .environment(model)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .granularOpenRecentImage)) { notification in
+            guard let url = notification.object as? URL else { return }
+            model.openForEditing([url])
+        }
         .onReceive(NotificationCenter.default.publisher(for: .granularOpenURLs)) { notification in
             guard let urls = notification.object as? [URL] else { return }
             if model.operationMode == .edit {
@@ -88,6 +102,20 @@ struct ContentView: View {
             },
             message: {
                 Text(model.startupError ?? "Unknown error")
+            }
+        )
+        .alert(
+            model.editorAlert?.title ?? "",
+            isPresented: Binding(
+                get: { model.editorAlert != nil },
+                set: { if !$0 { model.editorAlert = nil } }
+            ),
+            presenting: model.editorAlert,
+            actions: { _ in
+                Button("OK", role: .cancel) {}
+            },
+            message: { alert in
+                Text(alert.message)
             }
         )
     }
