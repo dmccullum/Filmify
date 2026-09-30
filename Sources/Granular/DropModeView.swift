@@ -1530,15 +1530,6 @@ private struct FilmBackStatusBar: View {
     }
 }
 
-/// The dark window the counters read through, lit along its lower lip.
-private struct CounterWindow: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(Color(hex: 0x0D0D0D))
-            .shadow(color: .white.opacity(0.7), radius: 0, y: 1)
-    }
-}
-
 /// “3 of 12” stamped beside the EXP counter while a batch runs, with a
 /// recessed stop button that finishes the frame in the gate and goes no further.
 private struct BatchCounter: View {
