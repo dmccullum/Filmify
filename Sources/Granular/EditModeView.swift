@@ -155,7 +155,9 @@ extension FocusedValues {
 
 struct EditModeView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var zoomController = ViewerZoomController()
+    @FocusState private var isCanvasFocused: Bool
 
     var body: some View {
         HStack(spacing: 0) {
@@ -203,11 +205,25 @@ struct EditModeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
+                // Focusable so ⌘C copies the image once the canvas is clicked,
+                // leaving Copy to the text fields whenever one of those has focus.
+                .focusable(interactions: .edit)
+                .focused($isCanvasFocused)
+                .focusEffectDisabled()
+                .onCopyCommand {
+                    model.copyProcessedImage()
+                    return []
+                }
                 .dropDestination(for: URL.self) { urls, _ in
                     model.openForEditing(urls)
                     return !urls.isEmpty
                 } isTargeted: { targeted in
                     model.isDropTargeted = targeted
+                }
+
+                if model.openImageURLs.count > 1 {
+                    EditorFilmstrip()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 EditorStatusBar()
@@ -230,6 +246,14 @@ struct EditModeView: View {
         .onChange(of: model.recipe.lensBlur.isEnabled) { _, enabled in
             dismissCenterAdjustment(.lensBlur, when: enabled)
         }
+        .onChange(of: model.selectedSourceURL, initial: true) { previous, url in
+            // A newly opened image takes focus, so ⌘C copies it straight away.
+            // (On first appearance, `previous` is the current image.)
+            if url != nil, previous == nil || previous == url {
+                isCanvasFocused = true
+            }
+        }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: model.openImageURLs.count > 1)
         .onExitCommand(perform: model.finishCenterAdjustment)
         .onDisappear(perform: model.finishCenterAdjustment)
     }
@@ -326,6 +350,7 @@ private struct ZoomableImageCanvas: View {
                         .shadow(color: .black.opacity(0.28), radius: 14, y: 5)
                         .contentShape(Rectangle())
                         .gesture(panGesture(canPan: canPan))
+                        .processedImageDragSource(isEnabled: !canPan && model.activeCenterTarget == nil)
 
                     if let target = model.activeCenterTarget {
                         ImageCenterOverlay(
@@ -854,12 +879,15 @@ private struct EditorEmptyState: View {
 
 private struct EditorStatusBar: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHoveringSource = false
 
     var body: some View {
         HStack(spacing: 12) {
-            if let source = model.selectedSourceURL {
-                HStack(spacing: 5) {
+            // The file name lives in the window title now; this keeps its size
+            // and place in the set, and the way to close it.
+            if model.selectedSourceURL != nil {
+                HStack(spacing: 6) {
                     Button {
                         model.closeEditorImage()
                     } label: {
@@ -881,7 +909,9 @@ private struct EditorStatusBar: View {
                     .accessibilityLabel("Close Image")
                     .help("Close image")
 
-                    Text(source.lastPathComponent)
+                    Text(imageSummary)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 .contentShape(Rectangle())
@@ -895,7 +925,20 @@ private struct EditorStatusBar: View {
                     .foregroundStyle(.secondary)
             }
 
+            EditorActivity()
+
             Spacer(minLength: 20)
+
+            shareButton
+
+            if model.openImageURLs.count > 1 {
+                Button("Export All…") {
+                    model.exportAllImages()
+                }
+                .buttonStyle(.glass)
+                .disabled(model.batchExport != nil)
+                .help("Export every open image with this recipe")
+            }
 
             Button("Export…") {
                 model.exportEditedImage()
@@ -908,5 +951,95 @@ private struct EditorStatusBar: View {
         .frame(height: 44)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: model.editorNotice)
+    }
+
+    /// Pixel size, and the image’s place among those open.
+    private var imageSummary: String {
+        var parts: [String] = []
+        if let size = model.sourcePreview?.pixelDimensions {
+            parts.append("\(Int(size.width)) × \(Int(size.height))")
+        }
+        if model.openImageURLs.count > 1,
+           let url = model.selectedSourceURL,
+           let index = model.openImageURLs.firstIndex(of: url) {
+            parts.append("\(index + 1) of \(model.openImageURLs.count)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var shareButton: some View {
+        let label = Label("Share", systemImage: "square.and.arrow.up")
+        if let source = model.selectedSourceURL, let preview = model.previewImage {
+            ShareLink(
+                item: model.processedImageItem(for: source),
+                preview: SharePreview(model.exportFileName(for: source), image: Image(nsImage: preview))
+            ) {
+                label
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.glass)
+            .help("Share the full-size image")
+        } else {
+            Button {} label: { label }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
+                .disabled(true)
+        }
+    }
+}
+
+/// Export progress, a full-size render in progress, or a brief confirmation.
+private struct EditorActivity: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let progress = model.batchExport {
+            HStack(spacing: 8) {
+                ProgressView(value: Double(progress.completed), total: Double(progress.total))
+                    .progressViewStyle(.linear)
+                    .controlSize(.small)
+                    .frame(width: 90)
+                Text("Exporting \(min(progress.completed + 1, progress.total)) of \(progress.total)…")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Button {
+                    model.cancelBatchExport()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Stop Exporting")
+                .help("Stop after the image being exported")
+            }
+            .accessibilityElement(children: .combine)
+        } else if model.isExporting || model.transferRenderCount > 0 {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text(model.isExporting ? "Exporting…" : "Preparing full-size image…")
+                    .foregroundStyle(.secondary)
+            }
+        } else if let notice = model.editorNotice {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .accessibilityHidden(true)
+                Text(notice.message)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+                if let url = notice.revealURL {
+                    Button("Show in Finder") {
+                        model.reveal(url)
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+            .transition(.opacity)
+        }
     }
 }

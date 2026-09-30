@@ -160,6 +160,24 @@ final class AppModel {
     // MARK: Edit document state
     // Keep each area's new stored state under its own mark.
 
+    /// Every image open in Edit mode, in filmstrip order. The one recipe
+    /// applies to whichever is shown.
+    var openImageURLs: [URL] = []
+    var imageThumbnails: [URL: NSImage] = [:]
+    /// Processed previews of open images for `previewCacheRecipe`, so moving
+    /// along the filmstrip doesn’t flash each original while it renders.
+    var processedPreviewCache: [URL: NSImage] = [:]
+    var previewCacheRecipe: FilmRecipe?
+    /// Newest first, for File ▸ Open Recent and the Dock menu.
+    var recentImages: [RecentImage] = RecentImageStore.load()
+    var editorAlert: EditorAlert?
+    var editorNotice: EditorNotice?
+    var editorNoticeTask: Task<Void, Never>?
+    var batchExport: BatchExportProgress?
+    var batchExportTask: Task<Void, Never>?
+    /// Full-resolution renders under way for sharing, dragging or copying.
+    var transferRenderCount = 0
+
     // MARK: Instant processing state
     // Keep each area's new stored state under its own mark.
 
