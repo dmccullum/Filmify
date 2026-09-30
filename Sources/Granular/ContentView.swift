@@ -56,9 +56,6 @@ struct ContentView: View {
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
-            if model.operationMode == .edit {
-                EditorToolbar()
-            }
             ToolbarItem(placement: .primaryAction) {
                 ModePicker()
             }

@@ -253,6 +253,7 @@ private struct CanvasOverlays: View {
                     Spacer()
                     if model.activeCenterTarget == nil, model.processedPreview != nil {
                         CompareButton()
+                        EditorShareButton()
                     }
                 }
             }
@@ -1054,25 +1055,11 @@ private struct EditorActivity: View {
     }
 }
 
-// MARK: Toolbar
+// MARK: Sharing
 
-/// Share and Export in the window toolbar, where macOS apps keep Share, with
-/// Export beside it as Edit mode’s one prominent action. They sit ahead of the
-/// mode picker, so the picker stays put as they come and go with the mode.
-struct EditorToolbar: ToolbarContent {
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            EditorShareButton()
-        }
-        ToolbarSpacer(.fixed, placement: .primaryAction)
-        ToolbarItem(placement: .primaryAction) {
-            EditorExportButton()
-        }
-        ToolbarSpacer(.fixed, placement: .primaryAction)
-    }
-}
-
-/// Opens the share picker at once; the full-size image renders alongside it.
+/// Share and Export in one place on the viewer, like the share button in
+/// Photos: the picker opens at once, Export… first, and the full-size image
+/// renders alongside it.
 private struct EditorShareButton: View {
     @Environment(AppModel.self) private var model
     @State private var anchor = ShareAnchor()
@@ -1083,25 +1070,15 @@ private struct EditorShareButton: View {
             model.shareProcessedImage(from: view)
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
+                .labelStyle(.iconOnly)
         }
+        .buttonStyle(.glass)
         .background {
             ShareAnchorView(anchor: anchor)
         }
         .disabled(model.selectedSourceURL == nil)
-        .help("Share the full-size image")
-    }
-}
-
-private struct EditorExportButton: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        Button("Export…") {
-            model.exportEditedImage()
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(model.selectedSourceURL == nil || model.isExporting)
-        .help("Export the full-size image (⌘E)")
+        .help("Export or share the full-size image")
+        .accessibilityLabel("Share or Export")
     }
 }
 

@@ -173,6 +173,19 @@ final class ProcessedImageSharePicker: NSObject, @preconcurrency NSSharingServic
         picker.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
     }
 
+    /// Export… leads the list, so saving a copy lives with sharing one.
+    func sharingServicePicker(
+        _ sharingServicePicker: NSSharingServicePicker,
+        sharingServicesForItems items: [Any],
+        proposedSharingServices proposedServices: [NSSharingService]
+    ) -> [NSSharingService] {
+        let image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: nil) ?? NSImage()
+        let export = NSSharingService(title: "Export…", image: image, alternateImage: nil) { [weak model] in
+            MainActor.assumeIsolated { model?.exportEditedImage() }
+        }
+        return [export] + proposedServices
+    }
+
     func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?) {
         // The chosen service holds on to the item from here.
         if model?.sharePicker === self {
