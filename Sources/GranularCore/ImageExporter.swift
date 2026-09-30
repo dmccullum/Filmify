@@ -44,7 +44,8 @@ public final class ImageExporter: @unchecked Sendable {
             image,
             from: image.extent.integral,
             format: .RGBAh,
-            colorSpace: colorSpace
+            colorSpace: colorSpace,
+            deferred: false
         ) else {
             throw ImageExporterError.imageCreationFailed
         }
@@ -53,6 +54,8 @@ public final class ImageExporter: @unchecked Sendable {
 
     /// Renders straight to a bitmap for display; encoding a preview to a file
     /// format and decoding it again costs several times the render itself.
+    /// It renders here and now: left to itself, Core Image defers large
+    /// images until they're first drawn, which would be on the main thread.
     public func previewImage(for image: CIImage, maximumDimension: CGFloat = 1_600) throws -> CGImage {
         let scale = min(1, maximumDimension / max(image.extent.width, image.extent.height))
         let preview = scale < 1
@@ -63,7 +66,8 @@ public final class ImageExporter: @unchecked Sendable {
             preview,
             from: preview.extent.integral,
             format: .RGBA8,
-            colorSpace: colorSpace
+            colorSpace: colorSpace,
+            deferred: false
         ) else {
             throw ImageExporterError.imageCreationFailed
         }
