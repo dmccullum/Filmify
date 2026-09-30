@@ -154,8 +154,9 @@ public final class ImageExporter: @unchecked Sendable {
     private func resolvedFormat(_ format: OutputFormat, sourceURL: URL) -> OutputFormat {
         guard format == .sameAsSource else { return format }
         return switch sourceURL.pathExtension.lowercased() {
-        case "jpg", "jpeg": OutputFormat.jpeg
-        case "heic", "heif": OutputFormat.heic
+        // WebP can’t be written, so it comes out as JPEG; AVIF as HEIC, its nearest kin.
+        case "jpg", "jpeg", "webp": OutputFormat.jpeg
+        case "heic", "heif", "avif": OutputFormat.heic
         case "png": OutputFormat.png
         case "tif", "tiff": OutputFormat.tiff
         default: OutputFormat.tiff

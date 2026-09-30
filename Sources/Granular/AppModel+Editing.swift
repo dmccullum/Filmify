@@ -419,8 +419,8 @@ extension AppModel {
         case .tiff: .tiff
         case .sameAsSource:
             switch sourceURL.pathExtension.lowercased() {
-            case "jpg", "jpeg": .jpeg
-            case "heic", "heif": .heic
+            case "jpg", "jpeg", "webp": .jpeg
+            case "heic", "heif", "avif": .heic
             case "png": .png
             default: .tiff
             }
@@ -501,7 +501,7 @@ struct EditorAlert: Identifiable {
 
     /// Files that aren’t images Granular can read, named so it’s clear which.
     @MainActor static func unopened(_ urls: [URL], openedAny: Bool) -> EditorAlert {
-        let formats = "Granular opens JPEG, HEIC, PNG, and TIFF images."
+        let formats = "Granular opens JPEG, HEIC, PNG, TIFF, WebP, and AVIF images."
         if urls.count == 1, let url = urls.first {
             let reason = AppModel.isSupportedImage(url)
                 ? "The file may be damaged, or saved in a form Granular can’t read."

@@ -321,7 +321,7 @@ final class AppModel {
     }
 
 
-    static let supportedImageTypes: [UTType] = [.jpeg, .heic, .png, .tiff]
+    static let supportedImageTypes: [UTType] = [.jpeg, .heic, .png, .tiff, .webP, UTType("public.avif")!]
 
     static func isSupportedImage(_ url: URL) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension.lowercased()) else { return false }

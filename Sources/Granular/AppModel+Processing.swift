@@ -127,6 +127,13 @@ extension AppModel {
                 }
             }
         }
+        // Say so when part of a drop wasn’t something Granular can read.
+        let skipped = urls.count - supported.count
+        if skipped > 0, !isBatchCancelled(batchID) {
+            statusMessage = skipped == 1
+                ? "Skipped 1 file that isn’t a supported image"
+                : "Skipped \(skipped) files that aren’t supported images"
+        }
         return completed
     }
 

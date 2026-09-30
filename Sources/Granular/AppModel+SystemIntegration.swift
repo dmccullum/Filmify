@@ -57,7 +57,7 @@ enum ShortcutError: Error, CustomLocalizedStringResourceConvertible {
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .noImages:
-            "None of those files are images Granular can process. Use JPEG, HEIC, PNG or TIFF."
+            "None of those files are images Granular can process. Use JPEG, HEIC, PNG, TIFF, WebP or AVIF."
         case .noOutputFolder:
             "Choose an Instant output folder in Granular, or pick an Output Folder in this action."
         case .folderUnavailable(let name):

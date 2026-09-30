@@ -23,7 +23,7 @@ final class ImageServiceProvider: NSObject {
         ) as? [URL] ?? []
         let images = urls.filter(AppModel.isSupportedImage)
         guard let model, !images.isEmpty else {
-            error.pointee = "Granular can only filmify JPEG, HEIC, PNG and TIFF images." as NSString
+            error.pointee = "Granular can only filmify JPEG, HEIC, PNG, TIFF, WebP and AVIF images." as NSString
             return
         }
 

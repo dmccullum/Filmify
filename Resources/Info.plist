@@ -54,6 +54,8 @@
                 <string>public.heic</string>
                 <string>public.png</string>
                 <string>public.tiff</string>
+                <string>org.webmproject.webp</string>
+                <string>public.avif</string>
             </array>
             <key>NSServiceDescription</key>
             <string>Processes the selected images with Granular’s current recipe into the Instant output folder.</string>
@@ -110,6 +112,8 @@
                 <string>public.heic</string>
                 <string>public.png</string>
                 <string>public.tiff</string>
+                <string>org.webmproject.webp</string>
+                <string>public.avif</string>
             </array>
         </dict>
     </array>
