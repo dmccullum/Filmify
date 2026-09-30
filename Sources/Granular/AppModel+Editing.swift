@@ -379,10 +379,14 @@ extension AppModel {
     }
 
     /// The recipe shown under the file name, with “Custom” once it’s been adjusted.
+    /// The recipe, then the original’s size, format and file size.
     var editorWindowSubtitle: String {
         guard operationMode == .edit, selectedSourceURL != nil else { return "" }
-        guard isRecipeModified else { return recipeDisplayName }
-        return "\(currentRecipe.name) · \(recipeDisplayName)"
+        var parts = isRecipeModified ? [currentRecipe.name, recipeDisplayName] : [recipeDisplayName]
+        if let sourceInfo {
+            parts.append(sourceInfo.summary)
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -484,6 +488,18 @@ struct EditorSourceInfo: Equatable {
     /// The format, such as “JPEG”.
     let formatName: String?
     let byteCount: Int?
+
+    /// “6000 × 4000 · JPEG · 12.4 MB”
+    var summary: String {
+        var parts = ["\(Int(pixelSize.width)) × \(Int(pixelSize.height))"]
+        if let formatName {
+            parts.append(formatName)
+        }
+        if let byteCount {
+            parts.append(Int64(byteCount).formatted(.byteCount(style: .file)))
+        }
+        return parts.joined(separator: " · ")
+    }
 
     var longEdge: CGFloat {
         max(pixelSize.width, pixelSize.height)

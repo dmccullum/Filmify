@@ -184,8 +184,6 @@ struct EditModeView: View {
                         model.openForEditing(urls)
                         return !urls.isEmpty
                     }
-
-                EditorStatusBar()
             }
 
             AdjustmentsInspector()
@@ -258,6 +256,7 @@ private struct CanvasOverlays: View {
                 }
             }
             Spacer()
+            EditorActivity()
             ZoomControls(zoomController: zoomController)
         }
         .padding(16)
@@ -947,54 +946,8 @@ private struct EditorEmptyState: View {
 /// A quiet strip along the foot of the canvas, as in the Finder: what the open
 /// image is on the leading side, and what Granular is doing with it on the
 /// trailing side. Share and Export live in the window toolbar.
-private struct EditorStatusBar: View {
-    var body: some View {
-        HStack(spacing: 12) {
-            EditorSourceSummary()
-            Spacer(minLength: 16)
-            EditorActivity()
-        }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .padding(.horizontal, 14)
-        .frame(height: 28)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
-    }
-}
-
-/// The original’s size in pixels, format and file size.
-private struct EditorSourceSummary: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        if let info = model.sourceInfo {
-            HStack(spacing: 6) {
-                Image(systemName: "photo")
-                    .imageScale(.small)
-                    .accessibilityHidden(true)
-                Text(summary(of: info))
-                    .monospacedDigit()
-            }
-            .help("The original image: its size in pixels, format and file size")
-            .accessibilityElement(children: .combine)
-        }
-    }
-
-    private func summary(of info: EditorSourceInfo) -> String {
-        var parts = ["\(Int(info.pixelSize.width)) × \(Int(info.pixelSize.height))"]
-        if let format = info.formatName {
-            parts.append(format)
-        }
-        if let byteCount = info.byteCount {
-            parts.append(Int64(byteCount).formatted(.byteCount(style: .file)))
-        }
-        return parts.joined(separator: " · ")
-    }
-}
-
-/// An export or a full-size render in progress, or a brief notice.
+/// An export or a full-size render in progress, or a brief notice, floating
+/// above the zoom controls.
 private struct EditorActivity: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1022,8 +975,22 @@ private struct EditorActivity: View {
                 .transition(.opacity)
             }
         }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background {
+            if isShowing {
+                Capsule().fill(.regularMaterial)
+            }
+        }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: model.editorNotice)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: model.transferRenderCount > 0)
+    }
+
+    private var isShowing: Bool {
+        model.isExporting || model.transferRenderCount > 0 || model.editorNotice != nil
     }
 
     @ViewBuilder
