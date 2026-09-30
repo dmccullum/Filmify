@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// File menu: opening, moving between, exporting and revealing images.
+/// File menu: opening, moving between, exporting, sharing and revealing images.
 struct FileCommands: Commands {
     let model: AppModel
 
@@ -69,6 +69,18 @@ struct FileCommands: Commands {
                     model.exportAllImages()
                 }
                 .disabled(model.openImageURLs.isEmpty || model.batchExport != nil)
+
+                if let source = model.selectedSourceURL {
+                    ShareLink(
+                        item: model.processedImageItem(for: source),
+                        preview: SharePreview(model.exportFileName(for: source))
+                    ) {
+                        Text("Share")
+                    }
+                } else {
+                    Menu("Share") {}
+                        .disabled(true)
+                }
             }
 
             Button("Reveal Last Output") {

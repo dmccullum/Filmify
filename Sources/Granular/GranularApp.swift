@@ -10,6 +10,14 @@ extension Notification.Name {
 
 @MainActor
 final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        TransferFiles.removeAll()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        TransferFiles.removeAll()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         NotificationCenter.default.post(name: .granularOpenURLs, object: urls)
     }

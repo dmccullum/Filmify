@@ -158,6 +158,8 @@ final class AppModel {
     var editorNoticeTask: Task<Void, Never>?
     var batchExport: BatchExportProgress?
     var batchExportTask: Task<Void, Never>?
+    /// Full-resolution renders under way for sharing, dragging or copying.
+    var transferRenderCount = 0
 
     // MARK: Instant processing state
     // Keep each area's new stored state under its own mark.

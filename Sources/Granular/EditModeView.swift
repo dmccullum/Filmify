@@ -55,6 +55,7 @@ struct EditModeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var zoomController = ViewerZoomController()
+    @FocusState private var isCanvasFocused: Bool
 
     var body: some View {
         HStack(spacing: 0) {
@@ -110,6 +111,15 @@ struct EditModeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
+                // Focusable so ⌘C copies the image once the canvas is clicked,
+                // leaving Copy to the text fields whenever one of those has focus.
+                .focusable(interactions: .edit)
+                .focused($isCanvasFocused)
+                .focusEffectDisabled()
+                .onCopyCommand {
+                    model.copyProcessedImage()
+                    return []
+                }
                 .dropDestination(for: URL.self) { urls, _ in
                     model.openForEditing(urls)
                     return !urls.isEmpty
@@ -141,6 +151,13 @@ struct EditModeView: View {
         }
         .onChange(of: model.recipe.lensBlur.isEnabled) { _, enabled in
             dismissCenterAdjustment(.lensBlur, when: enabled)
+        }
+        .onChange(of: model.selectedSourceURL, initial: true) { previous, url in
+            // A newly opened image takes focus, so ⌘C copies it straight away.
+            // (On first appearance, `previous` is the current image.)
+            if url != nil, previous == nil || previous == url {
+                isCanvasFocused = true
+            }
         }
         .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: model.openImageURLs.count > 1)
         .onExitCommand(perform: model.finishCenterAdjustment)
@@ -192,6 +209,7 @@ private struct ZoomableImageCanvas: View {
                         .shadow(color: .black.opacity(0.28), radius: 14, y: 5)
                         .contentShape(Rectangle())
                         .gesture(panGesture(displaySize: displaySize, viewportSize: proxy.size, canPan: canPan))
+                        .processedImageDragSource(isEnabled: !canPan && model.activeCenterTarget == nil)
 
                     if let target = model.activeCenterTarget {
                         ImageCenterOverlay(
@@ -598,6 +616,8 @@ private struct EditorStatusBar: View {
 
             Spacer(minLength: 20)
 
+            shareButton
+
             if model.openImageURLs.count > 1 {
                 Button("Export All…") {
                     model.exportAllImages()
@@ -635,9 +655,29 @@ private struct EditorStatusBar: View {
         return parts.joined(separator: " · ")
     }
 
+    @ViewBuilder
+    private var shareButton: some View {
+        let label = Label("Share", systemImage: "square.and.arrow.up")
+        if let source = model.selectedSourceURL, let preview = model.previewImage {
+            ShareLink(
+                item: model.processedImageItem(for: source),
+                preview: SharePreview(model.exportFileName(for: source), image: Image(nsImage: preview))
+            ) {
+                label
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.glass)
+            .help("Share the full-size image")
+        } else {
+            Button {} label: { label }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
+                .disabled(true)
+        }
+    }
 }
 
-/// Export progress, or a brief confirmation.
+/// Export progress, a full-size render in progress, or a brief confirmation.
 private struct EditorActivity: View {
     @Environment(AppModel.self) private var model
 
@@ -663,11 +703,11 @@ private struct EditorActivity: View {
                 .help("Stop after the image being exported")
             }
             .accessibilityElement(children: .combine)
-        } else if model.isExporting {
+        } else if model.isExporting || model.transferRenderCount > 0 {
             HStack(spacing: 6) {
                 ProgressView()
                     .controlSize(.mini)
-                Text("Exporting…")
+                Text(model.isExporting ? "Exporting…" : "Preparing full-size image…")
                     .foregroundStyle(.secondary)
             }
         } else if let notice = model.editorNotice {
