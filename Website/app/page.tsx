@@ -16,7 +16,7 @@ export default function Home() {
     <main className="journal">
       <ParallaxMotion />
       <nav className="masthead">
-        <a className="journal-mark" href="#top" aria-label="Granular home"><img src={asset("/app-icon-dark.png?v=3")} alt="" /> GRANULAR</a>
+        <a className="journal-mark" href="#top" aria-label="Granular home"><img src={asset("/app-icon-dark.png?v=4")} alt="" /> GRANULAR</a>
         <a href="https://github.com/dmccullum/Granular">GITHUB ↗</a>
       </nav>
 
@@ -37,10 +37,10 @@ export default function Home() {
         <div className="workbench-words"><span>Drop photos in</span><em>for instant results,</em><span>or edit live.</span></div>
         <div className="workbench-views">
           <figure className="app-frame edit-frame" data-parallax="-18">
-            <img src={asset("/granular-edit.webp?v=3")} alt="Granular Edit mode with live preview and adjustment panels" />
+            <img src={asset("/granular-edit.webp?v=4")} alt="Granular Edit mode with live preview and adjustment panels" />
           </figure>
           <figure className="app-frame instant-frame" data-parallax="14">
-            <img src={asset("/granular-instant.webp?v=3")} alt="Granular Instant mode: a film canister and a strip of frames to drop images onto" />
+            <img src={asset("/granular-instant.webp?v=4")} alt="Granular Instant mode: a film canister and a strip of frames to drop images onto" />
           </figure>
         </div>
       </section>
@@ -62,7 +62,7 @@ export default function Home() {
       </section>
 
       <section className="last-frame">
-        <img src={asset("/app-icon-dark.png?v=3")} alt="Granular app icon" />
+        <img src={asset("/app-icon-dark.png?v=4")} alt="Granular app icon" />
         <h2>Made with love<br />by <a href="https://danielm.cc">Daniel McCullum</a></h2>
         <a className="stamp stamp-red" href="https://github.com/dmccullum/Granular">VIEW ON GITHUB ↗</a>
       </section>
