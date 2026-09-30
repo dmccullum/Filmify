@@ -6,6 +6,7 @@ import SwiftUI
 struct RecipeMenu: View {
     @Environment(AppModel.self) private var model
     @State private var isPresented = false
+    @State private var buttonFrame = CGRect.zero
 
     var body: some View {
         Button {
@@ -36,10 +37,28 @@ struct RecipeMenu: View {
         .fixedSize(horizontal: false, vertical: true)
         .help("Choose or save a film recipe")
         .accessibilityLabel("Recipe: \(model.recipeDisplayName)")
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { buttonFrame = $0 }
+        .popover(isPresented: $isPresented, attachmentAnchor: popoverAnchor, arrowEdge: .bottom) {
             RecipeGrid(dismiss: { isPresented = false })
                 .environment(model)
         }
+    }
+
+    /// The button sits at the window’s trailing edge and the grid is wider than
+    /// the room beside it, so a popover centred on the button would hang off the
+    /// window. Aim it at a point far enough inboard that the popover ends just
+    /// inside the edge, still below the header where the arrow points.
+    private var popoverAnchor: PopoverAttachmentAnchor {
+        let windowWidth = NSApp.keyWindow?.contentView?.bounds.width ?? 0
+        let roomAfterButton = windowWidth > buttonFrame.maxX ? windowWidth - buttonFrame.maxX : 16
+        let overhang = RecipeGrid.popoverWidth / 2 + 8 - roomAfterButton - buttonFrame.width / 2
+        let shift = max(0, overhang)
+        return .rect(.rect(CGRect(
+            x: (buttonFrame.width - 1) / 2 - shift,
+            y: 0,
+            width: 1,
+            height: buttonFrame.height
+        )))
     }
 }
 
@@ -51,6 +70,7 @@ private struct RecipeGrid: View {
     @FocusState private var isFocused: Bool
 
     private static let columnCount = 4
+    static var popoverWidth: CGFloat { CGFloat(columnCount) * (RecipeTile.width + 8) + 20 }
     private let columns = Array(
         repeating: GridItem(.fixed(RecipeTile.width), spacing: 8, alignment: .top),
         count: columnCount
@@ -81,7 +101,7 @@ private struct RecipeGrid: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
         }
-        .frame(width: CGFloat(Self.columnCount) * (RecipeTile.width + 8) + 20)
+        .frame(width: Self.popoverWidth)
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
