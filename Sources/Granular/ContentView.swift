@@ -56,6 +56,19 @@ struct ContentView: View {
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
+            if model.operationMode == .edit {
+                ToolbarItem(placement: .primaryAction) {
+                    EditorShareButton()
+                }
+                // Holds Share over the image's side of the window, at the
+                // inspector's edge, rather than crowding the mode picker.
+                ToolbarItem(placement: .primaryAction) {
+                    Color.clear
+                        .frame(width: 165, height: 1)
+                        .accessibilityHidden(true)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
             ToolbarItem(placement: .primaryAction) {
                 ModePicker()
             }

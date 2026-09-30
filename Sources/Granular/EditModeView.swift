@@ -251,7 +251,6 @@ private struct CanvasOverlays: View {
                     Spacer()
                     if model.activeCenterTarget == nil, model.processedPreview != nil {
                         CompareButton()
-                        EditorShareButton()
                     }
                 }
             }
@@ -1024,10 +1023,10 @@ private struct EditorActivity: View {
 
 // MARK: Sharing
 
-/// Share and Export in one place on the viewer, like the share button in
+/// Share and Export in one place in the toolbar, like the share button in
 /// Photos: the picker opens at once, Export… first, and the full-size image
 /// renders alongside it.
-private struct EditorShareButton: View {
+struct EditorShareButton: View {
     @Environment(AppModel.self) private var model
     @State private var anchor = ShareAnchor()
 
@@ -1039,7 +1038,6 @@ private struct EditorShareButton: View {
             Label("Share", systemImage: "square.and.arrow.up")
                 .labelStyle(.iconOnly)
         }
-        .buttonStyle(.glass)
         .background {
             ShareAnchorView(anchor: anchor)
         }
