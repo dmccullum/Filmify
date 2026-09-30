@@ -28,7 +28,7 @@ struct GranularDesktopApp: App {
             ContentView()
                 .environment(model)
         }
-        .defaultSize(width: 700, height: 400)
+        .defaultSize(model.initialWindowSize)
         .restorationBehavior(.disabled)
         .commands {
             AboutCommands()
@@ -37,6 +37,7 @@ struct GranularDesktopApp: App {
 
             FileCommands(model: model)
             RecipeCommands(model: model)
+            HelpCommands()
         }
 
         Settings {
@@ -47,7 +48,10 @@ struct GranularDesktopApp: App {
         MenuBarExtra(
             "Granular",
             systemImage: model.isWatching ? "drop.fill" : "drop",
-            isInserted: $model.showMenuBarExtra
+            isInserted: Binding(
+                get: { model.menuBarVisibility == .always || model.showMenuBarExtra },
+                set: { model.showMenuBarExtra = $0 }
+            )
         ) {
             MenuBarStatusView()
                 .environment(model)

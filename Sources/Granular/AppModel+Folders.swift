@@ -65,6 +65,7 @@ extension AppModel {
         self.monitor = monitor
         isWatching = true
         showMenuBarExtra = true
+        UserDefaults.standard.set(true, forKey: SettingsKey.wasWatching)
         watchErrorMessage = nil
         watchStatusMessage = "Watching \(input.lastPathComponent)"
         statusMessage = watchStatusMessage
@@ -87,20 +88,40 @@ extension AppModel {
         monitor = nil
         isWatching = false
         showMenuBarExtra = false
+        UserDefaults.standard.set(false, forKey: SettingsKey.wasWatching)
         watchErrorMessage = nil
         watchStatusMessage = "Watching paused"
         statusMessage = watchStatusMessage
     }
 
-    func setLaunchAtLogin(_ enabled: Bool) {
+    /// Picks watching back up where the last launch left it. Only a deliberate
+    /// pause clears the memory, so quitting, a restart or an unmounted drive
+    /// doesn’t stop the automation from coming back.
+    func resumeWatchingIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.wasWatching),
+              watchedInputFolder != nil, watchedOutputFolder != nil else { return }
+        startWatching()
+    }
+
+    func revealDropOutputFolder() {
+        guard let dropOutputFolder else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([dropOutputFolder])
+    }
+
+    /// Returns a message if macOS refused, so Settings can show it.
+    @discardableResult
+    func setLaunchAtLogin(_ enabled: Bool) -> String? {
         do {
             if enabled {
                 try SMAppService.mainApp.register()
             } else {
                 try SMAppService.mainApp.unregister()
             }
+            return nil
         } catch {
-            statusMessage = "Launch at Login: \(error.localizedDescription)"
+            let message = "Launch at Login: \(error.localizedDescription)"
+            statusMessage = message
+            return message
         }
     }
 

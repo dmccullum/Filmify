@@ -79,9 +79,7 @@ extension AppModel {
         panel.prompt = "Export"
         panel.allowedContentTypes = [type]
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = sourceURL.deletingPathExtension().lastPathComponent
-            + " — Granular."
-            + (type.preferredFilenameExtension ?? "tiff")
+        panel.nameFieldStringValue = suggestedExportName(for: sourceURL, type: type)
         guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
 
         Task { await exportEditor(sourceURL: sourceURL, destinationURL: destinationURL) }

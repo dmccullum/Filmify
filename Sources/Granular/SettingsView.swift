@@ -2,15 +2,102 @@ import GranularCore
 import ServiceManagement
 import SwiftUI
 
+/// Settings as toolbar tabs. Each tab is sized to its own content, so nothing
+/// scrolls and the window grows or shrinks as the tabs change.
 struct SettingsView: View {
+    var body: some View {
+        TabView {
+            Tab("General", systemImage: "gearshape") {
+                GeneralSettings()
+            }
+            Tab("Output", systemImage: "photo.on.rectangle") {
+                OutputSettings()
+            }
+            Tab("Automation", systemImage: "folder.badge.gearshape") {
+                AutomationSettings()
+            }
+        }
+        .background(SettingsWindowConfigurator())
+    }
+}
+
+/// A grouped form that reports its full height instead of scrolling.
+private struct SettingsPane<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        Form { content }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            .frame(width: 520)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+// MARK: General
+
+private struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
     @State private var launchAtLogin = false
+    @State private var launchAtLoginError: String?
 
     var body: some View {
         @Bindable var model = model
 
-        Form {
-            Section("Output") {
+        SettingsPane {
+            Section("Startup") {
+                Toggle("Launch Granular at login", isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { enabled in
+                        launchAtLoginError = model.setLaunchAtLogin(enabled)
+                        launchAtLogin = SMAppService.mainApp.status == .enabled
+                    }
+                ))
+                if let launchAtLoginError {
+                    Label(launchAtLoginError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                }
+
+                Toggle("Open in last-used mode", isOn: $model.opensInLastUsedMode)
+                Text("Otherwise Granular always opens in Instant mode.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Menu Bar") {
+                Picker("Show Granular in the menu bar", selection: $model.menuBarVisibility) {
+                    ForEach(MenuBarVisibility.allCases) { visibility in
+                        Text(visibility.title).tag(visibility)
+                    }
+                }
+                Text("The menu bar item shows watching status and can pause or resume it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear {
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+        }
+    }
+}
+
+// MARK: Output
+
+private struct OutputSettings: View {
+    @Environment(AppModel.self) private var model
+    /// Remembered so turning resizing off and on again keeps the number.
+    @State private var lastLongEdge = 2_048
+
+    private var isLossless: Bool {
+        model.outputOptions.format == .png || model.outputOptions.format == .tiff
+    }
+
+    var body: some View {
+        @Bindable var model = model
+
+        SettingsPane {
+            Section("Format") {
                 Picker("Format", selection: $model.outputOptions.format) {
                     ForEach(OutputFormat.allCases, id: \.self) { format in
                         Text(format.displayName).tag(format)
@@ -26,12 +113,129 @@ struct SettingsView: View {
                             .frame(width: 40, alignment: .trailing)
                     }
                 }
-                .disabled(model.outputOptions.format == .png || model.outputOptions.format == .tiff)
+                .disabled(isLossless)
+                if isLossless {
+                    Text("\(model.outputOptions.format.displayName) is lossless, so it has no quality setting.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Toggle("Remove GPS location metadata", isOn: $model.outputOptions.stripLocationMetadata)
             }
 
-            Section("Watched Folder") {
+            Section("Size and Color") {
+                Toggle("Resize by long edge", isOn: Binding(
+                    get: { model.outputOptions.resizeLongEdge != nil },
+                    set: { model.outputOptions.resizeLongEdge = $0 ? lastLongEdge : nil }
+                ))
+                if let longEdge = model.outputOptions.resizeLongEdge {
+                    LabeledContent("Long edge") {
+                        HStack(spacing: 6) {
+                            TextField("Pixels", value: Binding(
+                                get: { longEdge },
+                                set: { setLongEdge($0) }
+                            ), format: .number.grouping(.never))
+                                .labelsHidden()
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 64)
+                            Text("px")
+                                .foregroundStyle(.secondary)
+                            Stepper("Long edge", value: Binding(
+                                get: { longEdge },
+                                set: { setLongEdge($0) }
+                            ), in: 16 ... 30_000, step: 100)
+                                .labelsHidden()
+                        }
+                    }
+                    Text("Larger images are scaled down to this size. Smaller ones are left alone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Picker("Color space", selection: $model.outputOptions.colorSpace) {
+                    ForEach(OutputColorSpace.allCases, id: \.self) { space in
+                        Text(space.displayName).tag(space)
+                    }
+                }
+            }
+
+            Section("Files") {
+                SettingsFolderRow(title: "Instant folder", url: model.dropOutputFolder) {
+                    model.chooseDropOutputFolder()
+                } reveal: {
+                    model.revealDropOutputFolder()
+                }
+
+                LabeledContent("Filename") {
+                    HStack(spacing: 6) {
+                        TextField(
+                            "Filename",
+                            text: $model.outputOptions.filenameTemplate,
+                            prompt: Text(OutputNaming.defaultTemplate)
+                        )
+                        .labelsHidden()
+                        .frame(width: 220)
+                        Menu {
+                            ForEach(OutputNaming.tokens, id: \.self) { token in
+                                Button(token) { model.outputOptions.filenameTemplate += token }
+                            }
+                            Divider()
+                            Button("Reset to Default") {
+                                model.outputOptions.filenameTemplate = OutputNaming.defaultTemplate
+                            }
+                            .disabled(model.outputOptions.filenameTemplate == OutputNaming.defaultTemplate)
+                        } label: {
+                            Image(systemName: "curlybraces")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Insert a token or reset the filename")
+                        .accessibilityLabel("Filename tokens")
+                    }
+                }
+                LabeledContent("Example") {
+                    Text(exampleFilename)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+                Text("Tokens: {name}, {recipe}, {date} and {counter}. If a name is already taken, a number is added.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func setLongEdge(_ pixels: Int) {
+        lastLongEdge = min(30_000, max(16, pixels))
+        model.outputOptions.resizeLongEdge = lastLongEdge
+    }
+
+    private var exampleFilename: String {
+        let name = OutputNaming.render(
+            template: model.outputOptions.filenameTemplate,
+            name: "IMG_2048",
+            recipe: model.recipe.name
+        )
+        let fileExtension = switch model.outputOptions.format {
+        case .sameAsSource, .jpeg: "jpg"
+        case .heic: "heic"
+        case .png: "png"
+        case .tiff: "tiff"
+        }
+        return name + "." + fileExtension
+    }
+}
+
+// MARK: Automation
+
+private struct AutomationSettings: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        SettingsPane {
+            Section("Watched Folders") {
                 SettingsFolderRow(title: "Incoming", url: model.watchedInputFolder) {
                     model.chooseWatchedInputFolder()
                 }
@@ -54,7 +258,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Text("Files are processed with the currently selected recipe after they finish copying. Granular remains available in the menu bar while watching.")
+                Text("Files are processed with the currently selected recipe after they finish copying. Watching picks up again whenever Granular launches, so turn on Launch at login to keep it running.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -67,25 +271,6 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(model.watchErrorMessage == nil ? Color.secondary : Color.orange)
             }
-
-            Section("Application") {
-                Toggle("Launch Granular at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enabled in
-                        model.setLaunchAtLogin(enabled)
-                    }
-            }
-
-            Section {
-                LabeledContent("Processing") {
-                    Text("Apple Core Image · extended-linear color")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 560, height: 560)
-        .onAppear {
-            launchAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
 }
@@ -94,6 +279,7 @@ private struct SettingsFolderRow: View {
     let title: String
     let url: URL?
     let choose: () -> Void
+    var reveal: (() -> Void)?
 
     var body: some View {
         LabeledContent(title) {
@@ -103,6 +289,33 @@ private struct SettingsFolderRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Button("Choose…", action: choose)
+                if let reveal {
+                    Button(action: reveal) {
+                        Image(systemName: "arrow.right.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(url == nil)
+                    .help("Show in Finder")
+                    .accessibilityLabel("Show \(title) in Finder")
+                }
+            }
+        }
+    }
+}
+
+/// Settings windows can’t be zoomed: each tab already fits its content.
+private struct SettingsWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { ConfiguringView() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    private final class ConfiguringView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            // After SwiftUI has finished configuring the window.
+            Task { @MainActor in
+                window.standardWindowButton(.zoomButton)?.isEnabled = false
+                window.styleMask.remove(.resizable)
             }
         }
     }

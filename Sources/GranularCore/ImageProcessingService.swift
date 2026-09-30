@@ -133,6 +133,7 @@ public actor ImageProcessingService {
             image: rendered,
             sourceURL: sourceURL,
             destinationFolder: destinationFolder,
+            recipeName: recipe.name,
             options: options
         )
     }

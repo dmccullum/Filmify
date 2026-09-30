@@ -75,13 +75,16 @@ public final class ImageExporter: @unchecked Sendable {
         sourceURL: URL,
         destinationFolder: URL,
         destinationURL: URL? = nil,
+        recipeName: String = "",
         options: OutputOptions
     ) throws -> URL {
         let format = resolvedFormat(options.format, sourceURL: sourceURL)
         let type = try uniformType(for: format)
-        let outputURL = destinationURL ?? collisionSafeURL(
-            sourceURL: sourceURL,
-            destinationFolder: destinationFolder,
+        let outputURL = destinationURL ?? OutputNaming.uniqueURL(
+            template: options.filenameTemplate,
+            name: sourceURL.deletingPathExtension().lastPathComponent,
+            recipe: recipeName,
+            folder: destinationFolder,
             fileExtension: type.preferredFilenameExtension ?? "tiff"
         )
         let actualDestinationFolder = outputURL.deletingLastPathComponent()
@@ -91,11 +94,15 @@ public final class ImageExporter: @unchecked Sendable {
 
         let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil)
         let properties = source.flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) } as? [CFString: Any]
-        let outputColorSpace = sourceColorSpace(from: source) ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        let convertsColorSpace = options.colorSpace != .keepSource
+        let outputColorSpace = options.colorSpace.cgColorSpace
+            ?? sourceColorSpace(from: source)
+            ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        let sized = resized(image, for: options)
 
         guard let cgImage = context.createCGImage(
-            image,
-            from: image.extent,
+            sized,
+            from: sized.extent,
             format: .RGBA8,
             colorSpace: outputColorSpace
         ) else {
@@ -117,6 +124,14 @@ public final class ImageExporter: @unchecked Sendable {
         outputProperties[kCGImagePropertyPixelHeight] = cgImage.height
         if options.stripLocationMetadata {
             outputProperties.removeValue(forKey: kCGImagePropertyGPSDictionary)
+        }
+        if convertsColorSpace {
+            // The source’s profile name and EXIF color tag describe pixels
+            // that are no longer in that color space.
+            outputProperties.removeValue(forKey: kCGImagePropertyProfileName)
+            var exif = outputProperties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+            exif[kCGImagePropertyExifColorSpace] = options.colorSpace == .sRGB ? 1 : 65_535
+            outputProperties[kCGImagePropertyExifDictionary] = exif
         }
         if format == .jpeg || format == .heic {
             outputProperties[kCGImageDestinationLossyCompressionQuality] = max(0, min(1, options.compressionQuality))
@@ -161,20 +176,17 @@ public final class ImageExporter: @unchecked Sendable {
         return image.colorSpace
     }
 
-    private func collisionSafeURL(
-        sourceURL: URL,
-        destinationFolder: URL,
-        fileExtension: String
-    ) -> URL {
-        let base = sourceURL.deletingPathExtension().lastPathComponent + " — Granular"
-        var candidate = destinationFolder.appendingPathComponent(base).appendingPathExtension(fileExtension)
-        var suffix = 2
-        while FileManager.default.fileExists(atPath: candidate.path) {
-            candidate = destinationFolder
-                .appendingPathComponent("\(base) \(suffix)")
-                .appendingPathExtension(fileExtension)
-            suffix += 1
-        }
-        return candidate
+    /// Scales the image down to the requested long edge, if one is set.
+    private func resized(_ image: CIImage, for options: OutputOptions) -> CIImage {
+        let extent = image.extent
+        guard let target = options.resizedSize(for: extent.size),
+              let filter = CIFilter(name: "CILanczosScaleTransform") else { return image }
+        let scale = target.height / extent.height
+        filter.setValue(image, forKey: kCIInputImageKey)
+        filter.setValue(scale, forKey: kCIInputScaleKey)
+        // Scaling the width separately lands both sides on whole pixels.
+        filter.setValue((target.width / extent.width) / scale, forKey: kCIInputAspectRatioKey)
+        guard let output = filter.outputImage else { return image }
+        return output.cropped(to: CGRect(origin: output.extent.origin, size: target))
     }
 }
