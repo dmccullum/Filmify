@@ -135,7 +135,7 @@ final class AppModel {
     var outputOptions = OutputOptions() {
         didSet { if outputOptions != oldValue { saveOutputOptions() } }
     }
-    var opensInLastUsedMode = true {
+    var opensInLastUsedMode = false {
         didSet { UserDefaults.standard.set(opensInLastUsedMode, forKey: SettingsKey.opensInLastUsedMode) }
     }
     var menuBarVisibility: MenuBarVisibility = .whileWatching {

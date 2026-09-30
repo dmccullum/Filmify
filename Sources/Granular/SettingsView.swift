@@ -60,7 +60,7 @@ private struct GeneralSettings: View {
                 }
 
                 Toggle("Open in last-used mode", isOn: $model.opensInLastUsedMode)
-                Text("Otherwise Granular always opens in Instant mode.")
+                Text("When off, Granular opens in Instant mode.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

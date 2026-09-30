@@ -581,14 +581,18 @@ private struct ParameterSlider: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack {
-                Text(title)
-                    .help("Double-click to reset to the recipe’s value")
-                Spacer()
+                // The double-click lives on the label alone, so a single click
+                // on the readout isn't held back waiting for a second one.
+                HStack {
+                    Text(title)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2, perform: resetToDefault)
+                .help("Double-click to reset to the recipe’s value")
                 readout
             }
             .font(.caption)
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2, perform: resetToDefault)
 
             Slider(value: sliderValue, in: range) { isEditing in
                 // Letting go ends the drag's undo step.
@@ -597,6 +601,7 @@ private struct ParameterSlider: View {
                 }
             }
             .tint(.accentColor)
+            .background(SliderDoubleClickReset(perform: resetToDefault))
             .background {
                 DefaultValueTick(fraction: defaultFraction)
             }
@@ -636,6 +641,7 @@ private struct ParameterSlider: View {
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .focused($isTyping)
                     .task { isTyping = true }
+                    .background(EndEditingOnOutsideClick())
                     .onSubmit(commitTypedValue)
                     .onExitCommand { typedValue = nil }
                     .onChange(of: isTyping) { _, isTyping in
@@ -657,8 +663,10 @@ private struct ParameterSlider: View {
                 Text(display.text(for: value))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .pointerStyle(.horizontalText)
             .help("Click to type a value")
             .accessibilityLabel("\(title) Value")
             .accessibilityValue(display.accessibilityText(for: value))
@@ -719,6 +727,79 @@ private struct ParameterSlider: View {
             return
         }
         setValue(typed, as: undoName)
+    }
+}
+
+/// Double-clicking a slider resets it, as in other Mac creative apps. The
+/// slider is an AppKit control that keeps its clicks to itself, so this
+/// watches for double-clicks landing on it rather than adding a gesture.
+private struct SliderDoubleClickReset: NSViewRepresentable {
+    let perform: () -> Void
+
+    func makeNSView(context: Context) -> WatchingView {
+        let view = WatchingView()
+        view.perform = perform
+        return view
+    }
+
+    func updateNSView(_ view: WatchingView, context: Context) {
+        view.perform = perform
+    }
+
+    final class WatchingView: NSView {
+        var perform: () -> Void = {}
+        private var monitor: Any?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                guard let self, event.clickCount == 2, event.window === self.window else { return event }
+                let point = self.convert(event.locationInWindow, from: nil)
+                if self.bounds.contains(point) {
+                    // After the slider has taken the click, so the reset wins.
+                    DispatchQueue.main.async { self.perform() }
+                }
+                return event
+            }
+        }
+    }
+}
+
+/// Ends typing in a field when the next click lands anywhere else, which
+/// AppKit doesn't do by itself for clicks on non-focusable content.
+private struct EndEditingOnOutsideClick: NSViewRepresentable {
+    func makeNSView(context: Context) -> WatchingView { WatchingView() }
+    func updateNSView(_ view: WatchingView, context: Context) {}
+
+    final class WatchingView: NSView {
+        private var monitor: Any?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                guard let self, let window = self.window, event.window === window else { return event }
+                let point = self.convert(event.locationInWindow, from: nil)
+                if !self.bounds.contains(point) {
+                    // Giving up first responder commits the field.
+                    window.makeFirstResponder(nil)
+                }
+                return event
+            }
+        }
     }
 }
 
