@@ -22,8 +22,14 @@ extension AppModel {
     }
 
     func recipeDidChange() {
-        persistRecipeSelection()
         schedulePreview()
+        // A slider drag changes the recipe on every tick; save once it rests.
+        recipeSaveTask?.cancel()
+        recipeSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.persistRecipeSelection()
+        }
     }
 
     /// Whether a recipe is the look in use, exactly as it was saved.

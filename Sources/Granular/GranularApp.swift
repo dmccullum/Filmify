@@ -20,6 +20,8 @@ final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // The last adjustment may still be waiting to be saved.
+        ImageServiceProvider.shared.model?.persistRecipeSelection()
         TransferFiles.removeAll()
     }
 

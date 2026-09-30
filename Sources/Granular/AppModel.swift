@@ -217,6 +217,7 @@ final class AppModel {
 
     // MARK: Recipe library state
     // Keep each area's new stored state under its own mark.
+    @ObservationIgnored var recipeSaveTask: Task<Void, Never>?
     /// The recipe shown in the Recipe Library window.
     var recipeLibrarySelection: String?
     /// A deletion waiting to be confirmed, and the window asking.
