@@ -140,6 +140,10 @@ final class AppModel {
     // MARK: Viewer state
     // Keep each area's new stored state under its own mark.
 
+    /// True while the compare button or Space is held down, to show the
+    /// original for as long as it is held without changing `showOriginal`.
+    var isHoldingCompare = false
+
     // MARK: Edit document state
     // Keep each area's new stored state under its own mark.
 
@@ -167,7 +171,7 @@ final class AppModel {
     }
 
     var previewImage: NSImage? {
-        if showOriginal { return sourcePreview }
+        if isShowingOriginal { return sourcePreview }
         return processedPreview ?? sourcePreview
     }
 
