@@ -13,11 +13,47 @@ if [[ ! -d "$ICON_SOURCE_PACKAGE" ]]; then
     exit 66
 fi
 
-swift build -c release
+# Shortcuts only finds App Intents through Metadata.appintents, which Xcode
+# makes from the compile-time values the compiler records for these protocols.
+# SwiftPM doesn't, so ask the compiler for them here (the same list Xcode uses)
+# and run Xcode's extractor below. Release builds are whole-module, so this is
+# one file; GranularCore writes it first and Granular overwrites it after.
+INTENTS_DIR="$ROOT/.build/appintents"
+mkdir -p "$INTENTS_DIR"
+print -r -- '["AppIntent","EntityQuery","AppEntity","TransientEntity","AppEnum","AppShortcutProviding","AppShortcutsProvider","AnyResolverProviding","AppIntentsPackage","DynamicOptionsProvider","_IntentValueRepresentable","_AssistantIntentsProvider","_GenerativeFunctionExtractable"]' \
+    > "$INTENTS_DIR/protocols.json"
+
+swift build -c release \
+    -Xswiftc -emit-const-values-path -Xswiftc "$INTENTS_DIR/Granular.swiftconstvalues" \
+    -Xswiftc -Xfrontend -Xswiftc -const-gather-protocols-file \
+    -Xswiftc -Xfrontend -Xswiftc "$INTENTS_DIR/protocols.json"
 
 rm -rf "$APP"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$ROOT/.build/release/Granular" "$CONTENTS/MacOS/Granular"
+
+print -rl -- "$ROOT"/Sources/Granular/*.swift > "$INTENTS_DIR/sources.txt"
+print -r -- "$INTENTS_DIR/Granular.swiftconstvalues" > "$INTENTS_DIR/constvalues.txt"
+xcrun appintentsmetadataprocessor \
+    --toolchain-dir "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain" \
+    --module-name Granular \
+    --sdk-root "$(xcrun --sdk macosx --show-sdk-path)" \
+    --xcode-version "$(xcodebuild -version | awk '/Build version/ { print $3 }')" \
+    --platform-family macOS \
+    --deployment-target 26.0 \
+    --bundle-identifier "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$ROOT/Resources/Info.plist")" \
+    --target-triple "$(uname -m)-apple-macos26.0" \
+    --binary-file "$CONTENTS/MacOS/Granular" \
+    --source-file-list "$INTENTS_DIR/sources.txt" \
+    --swift-const-vals-list "$INTENTS_DIR/constvalues.txt" \
+    --output "$CONTENTS/Resources" \
+    --compile-time-extraction \
+    --deployment-aware-processing \
+    --no-app-shortcuts-localization
+if [[ ! -f "$CONTENTS/Resources/Metadata.appintents/extract.actionsdata" ]]; then
+    echo "App Intents metadata wasn’t generated; Shortcuts won’t see Granular’s actions." >&2
+    exit 70
+fi
 cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 cp -R "$ROOT/Sources/GranularCore/FilmStocks" "$CONTENTS/Resources/FilmStocks"
 cp -R "$ROOT/Resources/Fonts" "$CONTENTS/Resources/Fonts"

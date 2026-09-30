@@ -36,7 +36,9 @@ struct RecipeMenu: View {
         .fixedSize(horizontal: false, vertical: true)
         .help("Choose or save a film recipe")
         .accessibilityLabel("Recipe: \(model.recipeDisplayName)")
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+        // The button sits at the window’s trailing edge, with no room beside
+        // it for the grid, so the grid opens to its left, over the canvas.
+        .popover(isPresented: $isPresented, arrowEdge: .leading) {
             RecipeGrid(dismiss: { isPresented = false })
                 .environment(model)
         }
@@ -51,6 +53,7 @@ private struct RecipeGrid: View {
     @FocusState private var isFocused: Bool
 
     private static let columnCount = 4
+    static var popoverWidth: CGFloat { CGFloat(columnCount) * (RecipeTile.width + 8) + 20 }
     private let columns = Array(
         repeating: GridItem(.fixed(RecipeTile.width), spacing: 8, alignment: .top),
         count: columnCount
@@ -81,7 +84,7 @@ private struct RecipeGrid: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
         }
-        .frame(width: CGFloat(Self.columnCount) * (RecipeTile.width + 8) + 20)
+        .frame(width: Self.popoverWidth)
         .focusable()
         .focusEffectDisabled()
         .focused($isFocused)
@@ -90,10 +93,17 @@ private struct RecipeGrid: View {
         .onKeyPress(.rightArrow) { move(by: 1) }
         .onKeyPress(.upArrow) { move(by: -Self.columnCount) }
         .onKeyPress(.downArrow) { move(by: Self.columnCount) }
+        // Return closes the grid on the recipe chosen; Escape closes it too,
+        // which the focusable grid would otherwise keep from the popover.
         .onKeyPress(.return) {
             dismiss()
             return .handled
         }
+        .onKeyPress(.escape) {
+            dismiss()
+            return .handled
+        }
+        .onExitCommand(perform: dismiss)
     }
 
     private func section(_ title: String, recipes: [FilmRecipe]) -> some View {
@@ -135,8 +145,9 @@ private struct RecipeGrid: View {
             Spacer()
             Button("Manage…") {
                 dismiss()
-                model.showRecipeManager = true
+                model.showRecipeLibrary()
             }
+            .help("Open the Recipe Library (⌥⌘R)")
         }
         .controlSize(.small)
     }

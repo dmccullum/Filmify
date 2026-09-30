@@ -155,6 +155,6 @@ public actor WatchedFolderMonitor {
 
     private static func isSupportedImage(_ url: URL) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension.lowercased()) else { return false }
-        return type == .jpeg || type == .heic || type == .png || type == .tiff
+        return [.jpeg, .heic, .png, .tiff, .webP, UTType("public.avif")].contains(type)
     }
 }

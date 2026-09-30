@@ -44,10 +44,28 @@ struct ContentView: View {
         }
         .toolbarBackgroundVisibility(showsCameraBody || model.isSettlingWindow ? .hidden : .automatic, for: .windowToolbar)
         .toolbar(removing: showsCameraBody ? .title : nil)
+        // In Edit mode the window stands for the open image: its name and
+        // proxy icon, with the recipe beneath. Instant mode keeps its nameplate.
+        .background {
+            EditorWindowDocument()
+        }
         .toolbar {
             if showsCameraBody {
                 ToolbarItem(placement: .principal) {
                     CameraNameplate()
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
+            if model.operationMode == .edit {
+                ToolbarItem(placement: .primaryAction) {
+                    EditorShareButton()
+                }
+                // Holds Share over the image's side of the window, at the
+                // inspector's edge, rather than crowding the mode picker.
+                ToolbarItem(placement: .primaryAction) {
+                    Color.clear
+                        .frame(width: 165, height: 1)
+                        .accessibilityHidden(true)
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
@@ -61,16 +79,19 @@ struct ContentView: View {
         .onAppear {
             model.scheduleWindowResize(for: model.operationMode, animated: false)
         }
-        .sheet(isPresented: $model.showRecipeManager) {
-            RecipeManagerView()
-                .environment(model)
-        }
+        .openingRecipeLibrary()
+        .confirmingRecipeDeletion(in: .main)
         .sheet(isPresented: $model.isSavingRecipe) {
             SaveRecipeSheet()
                 .environment(model)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .granularOpenRecentImage)) { notification in
+            guard let url = notification.object as? URL else { return }
+            model.openForEditing([url])
+        }
         .onReceive(NotificationCenter.default.publisher(for: .granularOpenURLs)) { notification in
             guard let urls = notification.object as? [URL] else { return }
+            // Edit mode opens the first and offers the rest to Instant mode.
             if model.operationMode == .edit {
                 model.openForEditing(urls)
             } else {
@@ -88,6 +109,20 @@ struct ContentView: View {
             },
             message: {
                 Text(model.startupError ?? "Unknown error")
+            }
+        )
+        .alert(
+            model.editorAlert?.title ?? "",
+            isPresented: Binding(
+                get: { model.editorAlert != nil },
+                set: { if !$0 { model.editorAlert = nil } }
+            ),
+            presenting: model.editorAlert,
+            actions: { _ in
+                Button("OK", role: .cancel) {}
+            },
+            message: { alert in
+                Text(alert.message)
             }
         )
     }
@@ -142,12 +177,24 @@ private struct ModePicker: View {
 
         Picker("Mode", selection: $model.operationMode) {
             ForEach(OperationMode.allCases) { mode in
-                Text(mode.rawValue).tag(mode)
+                Text(mode.rawValue)
+                    .tag(mode)
+                    .help(mode.help)
             }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
+        .help("Switch between Instant and Edit (⌘1, ⌘2)")
+    }
+}
+
+private extension OperationMode {
+    var help: String {
+        switch self {
+        case .drop: "Instant: drop images to process them straight to a folder (⌘1)"
+        case .edit: "Edit: adjust one image with a live preview, then export (⌘2)"
+        }
     }
 }
 
@@ -216,11 +263,11 @@ final class RecipeMenuController: NSObject {
     }
 
     @objc private func deleteRecipe() {
-        model.deleteSelectedRecipe()
+        model.requestDeletingCurrentRecipe()
     }
 
     @objc private func manageRecipes() {
-        model.showRecipeManager = true
+        model.showRecipeLibrary()
     }
 
     private func makeMenu() -> NSMenu {
@@ -267,7 +314,7 @@ final class RecipeMenuController: NSObject {
         }
 
         menu.addItem(.separator())
-        addAction("Manage Recipes…", symbol: "list.bullet", action: #selector(manageRecipes), to: menu)
+        addAction("Recipe Library…", symbol: "film.stack", action: #selector(manageRecipes), to: menu)
         return menu
     }
 

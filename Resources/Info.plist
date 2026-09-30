@@ -34,8 +34,71 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Filmify with Granular</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>filmifyImages</string>
+            <key>NSPortName</key>
+            <string>Granular</string>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.jpeg</string>
+                <string>public.heic</string>
+                <string>public.png</string>
+                <string>public.tiff</string>
+                <string>org.webmproject.webp</string>
+                <string>public.avif</string>
+            </array>
+            <key>NSServiceDescription</key>
+            <string>Processes the selected images with Granular’s current recipe into the Instant output folder.</string>
+        </dict>
+    </array>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.danielmccullum.granular.recipe</string>
+            <key>UTTypeDescription</key>
+            <string>Granular Recipe</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.json</string>
+            </array>
+            <key>UTTypeIconFile</key>
+            <string>AppIcon</string>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>granularrecipe</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
     <key>CFBundleDocumentTypes</key>
     <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Granular Recipe</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>AppIcon</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.danielmccullum.granular.recipe</string>
+            </array>
+        </dict>
         <dict>
             <key>CFBundleTypeName</key>
             <string>Image</string>
@@ -49,6 +112,8 @@
                 <string>public.heic</string>
                 <string>public.png</string>
                 <string>public.tiff</string>
+                <string>org.webmproject.webp</string>
+                <string>public.avif</string>
             </array>
         </dict>
     </array>

@@ -4,22 +4,109 @@ import SwiftUI
 
 extension Notification.Name {
     static let granularOpenURLs = Notification.Name("GranularOpenURLs")
+    /// Opens one image in Edit mode, whichever mode is showing.
+    static let granularOpenRecentImage = Notification.Name("GranularOpenRecentImage")
 }
 
+@MainActor
 final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        ProcessingNotifier.shared.becomeDelegate()
+        NSApp.servicesProvider = ImageServiceProvider.shared
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        TransferFiles.removeAll()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // The last adjustment may still be waiting to be saved.
+        ImageServiceProvider.shared.model?.persistRecipeSelection()
+        TransferFiles.removeAll()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
-        NotificationCenter.default.post(name: .granularOpenURLs, object: urls)
+        // Recipe files join the Recipe Library; everything else is an image.
+        let recipeFiles = urls.filter(RecipeFile.isRecipeFile)
+        if !recipeFiles.isEmpty {
+            RecipeFileInbox.receive(recipeFiles)
+        }
+        let images = urls.filter { !RecipeFile.isRecipeFile($0) }
+        if !images.isEmpty {
+            NotificationCenter.default.post(name: .granularOpenURLs, object: images)
+        }
+    }
+
+    /// Frames developed under Ask Each Time live in a temporary folder until
+    /// they're saved, so quitting would quietly lose them.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model = ImageServiceProvider.shared.model, !model.unsavedJobIDs.isEmpty else {
+            return .terminateNow
+        }
+        let count = model.unsavedJobIDs.count
+        let alert = NSAlert()
+        alert.messageText = count == 1
+            ? "Save the unsaved image before quitting?"
+            : "Save \(count) unsaved images before quitting?"
+        alert.informativeText = "If you don’t save, they’ll be discarded."
+        alert.addButton(withTitle: "Save…")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Don’t Save").hasDestructiveAction = true
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            NSApp.activate()
+            model.saveAllUnsaved()
+            return .terminateCancel
+        case .alertThirdButtonReturn:
+            return .terminateNow
+        default:
+            return .terminateCancel
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// Recent images, for picking up where you left off from the Dock.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let recents = RecentImageStore.load()
+        guard !recents.isEmpty else { return nil }
+
+        let menu = NSMenu()
+        for recent in recents.prefix(8) {
+            let item = NSMenuItem(
+                title: RecentImageStore.menuTitle(for: recent, among: recents),
+                action: #selector(openRecentImage(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = recent.url
+            let icon = NSWorkspace.shared.icon(forFile: recent.url.path)
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc private func openRecentImage(_ item: NSMenuItem) {
+        guard let url = item.representedObject as? URL else { return }
+        NSApp.activate()
+        NotificationCenter.default.post(name: .granularOpenRecentImage, object: url)
     }
 }
 
 @main
 struct GranularDesktopApp: App {
     @NSApplicationDelegateAdaptor(GranularApplicationDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var model: AppModel
+
+    init() {
+        let model = AppModel()
+        _model = State(initialValue: model)
+        SystemIntegration.connect(model)
+    }
 
     var body: some Scene {
         @Bindable var model = model
@@ -27,145 +114,49 @@ struct GranularDesktopApp: App {
         Window("Granular", id: "main") {
             ContentView()
                 .environment(model)
+                .recordingAdjustmentUndo(for: model)
         }
-        .defaultSize(width: 700, height: 400)
+        .defaultSize(model.initialWindowSize)
         .restorationBehavior(.disabled)
         .commands {
             AboutCommands()
             MainWindowCommands()
             ViewerCommands(model: model)
 
-            CommandGroup(after: .newItem) {
-                Button(model.operationMode == .drop ? "Process Images…" : "Open Image…") {
-                    model.chooseImages()
-                }
-                .keyboardShortcut("o")
-
-                if model.operationMode == .edit, model.selectedSourceURL != nil {
-                    Button("Close Image") {
-                        model.closeEditorImage()
-                    }
-                }
-
-                Divider()
-
-                Button("Choose Instant Output Folder…") {
-                    model.chooseDropOutputFolder()
-                }
-                if model.operationMode == .edit {
-                    Button("Export…") {
-                        model.exportEditedImage()
-                    }
-                    .keyboardShortcut("s")
-                    .disabled(model.selectedSourceURL == nil || model.isExporting)
-                }
-
-                Button("Reveal Last Output") {
-                    model.revealLastOutput()
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(model.completedJobCount == 0)
-            }
-
-            CommandMenu("Recipe") {
-                ForEach(model.availableRecipes) { recipe in
-                    Button(recipe.name) {
-                        model.selectRecipe(recipe)
-                    }
-                }
-
-                Divider()
-
-                Button("Save New Recipe…") {
-                    model.beginSavingRecipe()
-                }
-                .disabled(model.operationMode != .edit)
-
-                Button("Manage Recipes…") {
-                    model.showRecipeManager = true
-                }
-
-                if model.isSelectedRecipeCustom {
-                    Button("Update Current Recipe") {
-                        model.updateSelectedRecipe()
-                    }
-                    Button("Delete Current Recipe…", role: .destructive) {
-                        model.deleteSelectedRecipe()
-                    }
-                }
-
-                Divider()
-
-                Button("New Grain Pattern") {
-                    model.randomizeGrain()
-                }
-            }
-
+            FileCommands(model: model)
+            EditCommands(model: model)
+            RecipeCommands(model: model)
+            InstantCommands(model: model)
+            HelpCommands()
         }
+
+        Window("Recipe Library", id: RecipeLibraryView.windowID) {
+            RecipeLibraryView()
+                .environment(model)
+        }
+        .defaultSize(width: 800, height: 520)
+        .windowResizability(.contentMinSize)
+        // Opens where it was last left, but only when asked for.
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView()
                 .environment(model)
         }
 
-        MenuBarExtra(
-            "Granular",
-            systemImage: model.isWatching ? "drop.fill" : "drop",
-            isInserted: $model.showMenuBarExtra
-        ) {
+        MenuBarExtra(isInserted: Binding(
+            get: { model.menuBarVisibility == .always || model.showMenuBarExtra },
+            set: { model.showMenuBarExtra = $0 }
+        )) {
             MenuBarStatusView()
                 .environment(model)
+        } label: {
+            Image(nsImage: MenuBarGlyph.image(isWatching: model.isWatching))
+                .accessibilityLabel(model.isWatching ? "Granular, watching" : "Granular")
         }
-        .menuBarExtraStyle(.window)
-    }
-}
-
-private struct MainWindowCommands: Commands {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some Commands {
-        CommandGroup(replacing: .windowList) {
-            Button("Granular") {
-                NSApp.activate(ignoringOtherApps: true)
-                openWindow(id: "main")
-            }
-            .keyboardShortcut("0", modifiers: [.command])
-        }
-    }
-}
-
-private struct ViewerCommands: Commands {
-    @FocusedValue(\.granularViewerZoomController) private var zoomController
-    let model: AppModel
-
-    var body: some Commands {
-        CommandGroup(after: .toolbar) {
-            Button(model.showOriginal ? "Show Processed" : "Show Original") {
-                model.showOriginal.toggle()
-            }
-            .keyboardShortcut("\\", modifiers: [])
-            .disabled(model.operationMode != .edit || model.sourcePreview == nil)
-
-            Divider()
-
-            Button("Zoom In") {
-                zoomController?.zoomIn()
-            }
-            .keyboardShortcut("+", modifiers: [.command])
-            .disabled(model.operationMode != .edit || model.sourcePreview == nil || zoomController == nil)
-
-            Button("Zoom Out") {
-                zoomController?.zoomOut()
-            }
-            .keyboardShortcut("-", modifiers: [.command])
-            .disabled(model.operationMode != .edit || model.sourcePreview == nil || zoomController == nil)
-
-            Button("Zoom to Fit") {
-                zoomController?.fit()
-            }
-            .keyboardShortcut("0", modifiers: [.command])
-            .disabled(model.operationMode != .edit || model.sourcePreview == nil || zoomController == nil)
-        }
+        // A real menu, like every other menu bar item: keyboard navigation,
+        // type-select, and it gets out of the way as soon as a choice is made.
+        .menuBarExtraStyle(.menu)
     }
 }
 

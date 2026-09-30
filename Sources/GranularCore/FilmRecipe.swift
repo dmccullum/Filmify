@@ -414,7 +414,7 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
         self.canister = canister
     }
 
-    private enum CodingKeys: String, CodingKey {
+    enum CodingKeys: String, CodingKey {
         case id
         case name
         case tone
@@ -429,21 +429,51 @@ public struct FilmRecipe: Identifiable, Codable, Hashable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
+        try self.init(
+            container,
+            id: container.decode(String.self, forKey: .id),
+            name: container.decode(String.self, forKey: .name)
+        )
+    }
+
+    /// Reads the adjustments, with defaults for any group that's missing, so
+    /// a recipe from an older version, or one written by hand, still loads.
+    init(_ container: KeyedDecodingContainer<CodingKeys>, id: String, name: String) throws {
+        self.id = id
+        self.name = name
         tone = try container.decodeIfPresent(FilmToneSettings.self, forKey: .tone) ?? .init()
-        lightShaping = try container.decode(LightShapingSettings.self, forKey: .lightShaping)
+        lightShaping = try container.decodeIfPresent(LightShapingSettings.self, forKey: .lightShaping) ?? .init()
         lensBlur = try container.decodeIfPresent(LensBlurSettings.self, forKey: .lensBlur) ?? .init()
-        diffusion = try container.decode(DiffusionSettings.self, forKey: .diffusion)
-        halation = try container.decode(HalationSettings.self, forKey: .halation)
+        diffusion = try container.decodeIfPresent(DiffusionSettings.self, forKey: .diffusion) ?? .init()
+        halation = try container.decodeIfPresent(HalationSettings.self, forKey: .halation) ?? .init()
         landscapeGlow = try container.decodeIfPresent(
             LandscapeGlowSettings.self,
             forKey: .landscapeGlow
         ) ?? .init()
-        grain = try container.decode(GrainSettings.self, forKey: .grain)
+        grain = try container.decodeIfPresent(GrainSettings.self, forKey: .grain) ?? .init()
         canister = try container.decodeIfPresent(String.self, forKey: .canister)
     }
 
+}
+
+public extension FilmRecipe {
+    /// A name no other recipe has, numbered the way the Finder numbers
+    /// files: “Longmarch”, then “Longmarch 2”, “Longmarch 3”. Names match
+    /// whatever their case, as they do when renaming.
+    static func uniqueName(_ proposed: String, among names: some Sequence<String>) -> String {
+        let taken = Set(names.map { $0.lowercased() })
+        guard taken.contains(proposed.lowercased()) else { return proposed }
+        var number = 2
+        while taken.contains("\(proposed) \(number)".lowercased()) {
+            number += 1
+        }
+        return "\(proposed) \(number)"
+    }
+
+    /// The name for a copy of a recipe: “Longmarch copy”, then “Longmarch copy 2”.
+    static func duplicateName(for name: String, among names: some Sequence<String>) -> String {
+        uniqueName("\(name) copy", among: names)
+    }
 }
 
 public extension FilmRecipe {

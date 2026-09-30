@@ -48,7 +48,7 @@ enum JobState: Equatable {
     }
 }
 
-private struct StockThumbnailKey: Equatable {
+struct StockThumbnailKey: Equatable {
     let sourceURL: URL?
     let tone: FilmToneSettings
 }
@@ -101,7 +101,6 @@ final class AppModel {
     /// True while the window resizes between modes. The camera body stays up
     /// with the film unloaded until the window has reached its final size.
     var isSettlingWindow = false
-    var outputOptions = OutputOptions()
 
     var dropOutputFolder: URL?
     var watchedInputFolder: URL?
@@ -121,17 +120,119 @@ final class AppModel {
     var watchErrorMessage: String?
     var startupError: String?
 
-    private var processingService: ImageProcessingService?
-    private var previewTask: Task<Void, Never>?
-    private var previewNeedsRender = false
-    private var stockThumbnailTask: Task<Void, Never>?
-    private var stockThumbnailKey: StockThumbnailKey?
-    private static let stockThumbnailPixelSize = 224
-    private var resizeTask: Task<Void, Never>?
-    private var monitor: WatchedFolderMonitor?
-    private var activeSecurityURLs: [URL] = []
+    var processingService: ImageProcessingService?
+    var previewTask: Task<Void, Never>?
+    var previewNeedsRender = false
+    var stockThumbnailTask: Task<Void, Never>?
+    var stockThumbnailKey: StockThumbnailKey?
+    static let stockThumbnailPixelSize = 224
+    var resizeTask: Task<Void, Never>?
+    var monitor: WatchedFolderMonitor?
+    var activeSecurityURLs: [URL] = []
+
+    // MARK: Settings & window state
+    // Keep each area's new stored state under its own mark.
+    var outputOptions = OutputOptions() {
+        didSet { if outputOptions != oldValue { saveOutputOptions() } }
+    }
+    var opensInLastUsedMode = false {
+        didSet { UserDefaults.standard.set(opensInLastUsedMode, forKey: SettingsKey.opensInLastUsedMode) }
+    }
+    var menuBarVisibility: MenuBarVisibility = .whileWatching {
+        didSet { UserDefaults.standard.set(menuBarVisibility.rawValue, forKey: SettingsKey.menuBarVisibility) }
+    }
+    /// Where the window sat in each mode the last time the user left it there.
+    @ObservationIgnored var savedWindowFrames: [OperationMode: CGRect] = [:]
+    @ObservationIgnored weak var observedWindow: NSWindow?
+    @ObservationIgnored var windowFrameObservers: [NSObjectProtocol] = []
+    @ObservationIgnored var windowFrameSaveTask: Task<Void, Never>?
+
+    // MARK: Undo state
+    // Keep each area's new stored state under its own mark.
+    /// The main window's undo manager, where changes to the adjustments go.
+    @ObservationIgnored weak var undoManager: UndoManager?
+    /// The step a run of changes is joining, such as one slider drag.
+    @ObservationIgnored var openUndoStep: OpenUndoStep?
+    @ObservationIgnored var adjustmentChangeDepth = 0
+    /// Adjustments copied with Copy Settings, ready to paste.
+    var settingsOnPasteboard: FilmRecipe?
+    @ObservationIgnored var pasteboardChangeCount = -1
+
+    // MARK: Viewer state
+    // Keep each area's new stored state under its own mark.
+
+    /// True while the compare button or Space is held down, to show the
+    /// original for as long as it is held without changing `showOriginal`.
+    var isHoldingCompare = false
+
+    // MARK: Edit document state
+    // Keep each area's new stored state under its own mark.
+
+    /// The open image’s upright size, format and file size, read from its header.
+    var sourceInfo: EditorSourceInfo?
+    /// Newest first, for File ▸ Open Recent and the Dock menu.
+    var recentImages: [RecentImage] = RecentImageStore.load()
+    var editorAlert: EditorAlert?
+    var editorNotice: EditorNotice?
+    @ObservationIgnored var editorNoticeTask: Task<Void, Never>?
+    /// Full-size renders for sharing, dragging or copying that something is waiting on.
+    var transferRenderCount = 0
+    /// The last full-size render, reused while the image and its settings stay the same.
+    @ObservationIgnored var transferRender: TransferRender?
+    /// Keeps the share picker alive while it’s open.
+    @ObservationIgnored var sharePicker: ProcessedImageSharePicker?
+    /// The long edge, in screen pixels, the viewer shows the image at. Previews
+    /// render no larger than they’re seen.
+    @ObservationIgnored var previewDisplayDimension: CGFloat = AppModel.interactivePreviewDimension
+    /// The size the preview on screen was rendered at.
+    @ObservationIgnored var renderedPreviewDimension: CGFloat = 0
+    @ObservationIgnored var previewRefinementTask: Task<Void, Never>?
+    @ObservationIgnored var previewWantsRefinement = false
+
+    // MARK: Instant processing state
+    // Keep each area's new stored state under its own mark.
+    /// The drop batch being processed, for the “3 of 12” counter and Cancel Processing.
+    var instantBatch: ActiveBatch?
+    /// The burst of arrivals a watched folder is working through.
+    var watchBurst: ActiveBatch?
+    /// Images finished while Granular was in the background, badged on the Dock icon.
+    var backgroundFinishedCount = 0
+    /// Where a watched-folder job was written, so Retry sends it back there.
+    @ObservationIgnored var jobDestinationOverrides: [UUID: URL] = [:]
+    /// Recent Instant output folders, most recent first; read on first use.
+    var recentDropOutputFolders: [URL]?
+    @ObservationIgnored var activationObserver: (any NSObjectProtocol)?
+    /// Whether Instant asks where each roll goes instead of writing to
+    /// `dropOutputFolder`, which stays remembered while this is on.
+    var asksWhereToSaveInstantly = UserDefaults.standard.bool(forKey: InstantOutputKey.asksEachTime) {
+        didSet { UserDefaults.standard.set(asksWhereToSaveInstantly, forKey: InstantOutputKey.asksEachTime) }
+    }
+    /// Frames developed into a temporary folder, waiting to be saved somewhere.
+    var unsavedJobIDs: Set<UUID> = []
+    /// The unsaved frames the next Save panel will ask about.
+    @ObservationIgnored var jobsAwaitingSavePrompt: [UUID] = []
+    @ObservationIgnored var isSavePromptArmed = false
+    @ObservationIgnored var isPresentingSavePanel = false
+    @ObservationIgnored var savePromptTask: Task<Void, Never>?
+
+    // MARK: Recipe library state
+    // Keep each area's new stored state under its own mark.
+    @ObservationIgnored var recipeSaveTask: Task<Void, Never>?
+    /// The recipe shown in the Recipe Library window.
+    var recipeLibrarySelection: String?
+    /// A deletion waiting to be confirmed, and the window asking.
+    var recipeDeletionRequest: RecipeDeletionRequest?
+    /// An import or export that went wrong, shown in the Recipe Library.
+    var recipeLibraryAlert: RecipeLibraryAlert?
+    /// The Recipe Library's window while it's open: its own undo manager
+    /// keeps the library's steps, and its sheets appear there.
+    @ObservationIgnored weak var recipeLibraryWindow: NSWindow?
+
+    // MARK: System integration state
+    // Keep each area's new stored state under its own mark.
 
     init() {
+        restoreSettings()
         do {
             processingService = try ImageProcessingService()
         } catch {
@@ -143,10 +244,11 @@ final class AppModel {
         restoreFolder(forKey: BookmarkKey.dropOutput) { dropOutputFolder = $0 }
         restoreFolder(forKey: BookmarkKey.watchInput) { watchedInputFolder = $0 }
         restoreFolder(forKey: BookmarkKey.watchOutput) { watchedOutputFolder = $0 }
+        resumeWatchingIfNeeded()
     }
 
     var previewImage: NSImage? {
-        if showOriginal { return sourcePreview }
+        if isShowingOriginal { return sourcePreview }
         return processedPreview ?? sourcePreview
     }
 
@@ -163,18 +265,22 @@ final class AppModel {
         let x = min(1, max(0, x))
         let y = min(1, max(0, y))
 
-        switch target {
-        case .vignette:
-            recipe.lightShaping.centerX = x
-            recipe.lightShaping.centerY = y
-        case .lensBlur:
-            recipe.lensBlur.focusX = x
-            recipe.lensBlur.focusY = y
+        // Each drag of the target is one step on Edit ▸ Undo.
+        changeAdjustments("Move \(target.title) Center", coalescingKey: target) {
+            switch target {
+            case .vignette:
+                recipe.lightShaping.centerX = x
+                recipe.lightShaping.centerY = y
+            case .lensBlur:
+                recipe.lensBlur.focusX = x
+                recipe.lensBlur.focusY = y
+            }
         }
     }
 
     func finishCenterAdjustment() {
         activeCenterTarget = nil
+        endCoalescedChanges()
     }
 
     var availableRecipes: [FilmRecipe] {
@@ -218,782 +324,17 @@ final class AppModel {
         }.first
     }
 
-    func modeDidChange() {
-        if operationMode == .drop, jobs.isEmpty {
-            statusMessage = "Ready"
-        }
-        scheduleWindowResize(for: operationMode, animated: true)
-    }
 
-    func scheduleWindowResize(for mode: OperationMode, animated: Bool = true) {
-        resizeTask?.cancel()
-        resizeTask = Task { [weak self] in
-            guard !Task.isCancelled, let self, self.operationMode == mode else { return }
-            if mode == .drop {
-                // The film loads alongside the resize, not after it.
-                self.isFilmLoaded = true
-            }
-            await self.resizeWindow(for: mode, animated: animated)
-            guard !Task.isCancelled, self.operationMode == mode else { return }
-            withAnimation(.easeOut(duration: 0.18)) {
-                self.isSettlingWindow = false
-                self.arrivingLayoutSize = nil
-            }
-        }
-    }
+    static let supportedImageTypes: [UTType] = [.jpeg, .heic, .png, .tiff, .webP, UTType("public.avif")!]
 
-    private var mainWindow: NSWindow? {
-        NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible })
-    }
-
-    private func targetContentSize(for mode: OperationMode, in window: NSWindow) -> NSSize {
-        var contentSize = mode == .drop
-            ? NSSize(width: 700, height: 400)
-            : NSSize(width: 1_080, height: 970)
-        if let visibleFrame = window.screen?.visibleFrame {
-            contentSize.height = min(contentSize.height, visibleFrame.height - 28)
-        }
-        return contentSize
-    }
-
-    /// The area below the toolbar that a mode's content gets at its window size.
-    private func layoutSize(for mode: OperationMode) -> CGSize? {
-        guard let window = mainWindow, let contentView = window.contentView else { return nil }
-        let toolbarHeight = contentView.bounds.height - window.contentLayoutRect.height
-        let size = targetContentSize(for: mode, in: window)
-        return CGSize(width: size.width, height: size.height - toolbarHeight)
-    }
-
-    private func resizeWindow(for mode: OperationMode, animated: Bool) async {
-        guard let window = mainWindow else { return }
-        let contentSize = targetContentSize(for: mode, in: window)
-        let targetFrameSize = window.frameRect(
-            forContentRect: NSRect(origin: .zero, size: contentSize)
-        ).size
-        var targetFrame = window.frame
-        targetFrame.origin.x = window.frame.midX - targetFrameSize.width / 2
-        targetFrame.origin.y = window.frame.maxY - targetFrameSize.height
-        targetFrame.size = targetFrameSize
-
-        if let visibleFrame = window.screen?.visibleFrame {
-            targetFrame.origin.x = min(
-                max(targetFrame.origin.x, visibleFrame.minX),
-                visibleFrame.maxX - targetFrame.width
-            )
-            targetFrame.origin.y = min(
-                max(targetFrame.origin.y, visibleFrame.minY),
-                visibleFrame.maxY - targetFrame.height
-            )
-        }
-
-        // Instant mode keeps a fixed height and a free width. Lift the limit
-        // before growing into Edit mode; apply it once the window has shrunk.
-        if mode == .edit {
-            applySizeLimits(for: mode, contentHeight: contentSize.height, to: window)
-        }
-        if animated {
-            // Animate through the window's animator rather than the blocking
-            // setFrame(animate:), so SwiftUI keeps drawing while the size changes.
-            await withCheckedContinuation { continuation in
-                NSAnimationContext.runAnimationGroup { context in
-                    let c = Self.modeTransitionCurve
-                    context.duration = Self.modeTransitionDuration
-                    context.timingFunction = CAMediaTimingFunction(
-                        controlPoints: Float(c.x1), Float(c.y1), Float(c.x2), Float(c.y2)
-                    )
-                    window.animator().setFrame(targetFrame, display: true)
-                } completionHandler: {
-                    continuation.resume()
-                }
-            }
-        } else {
-            window.setFrame(targetFrame, display: true)
-        }
-        if mode == .drop {
-            applySizeLimits(for: mode, contentHeight: contentSize.height, to: window)
-        }
-    }
-
-    private func applySizeLimits(for mode: OperationMode, contentHeight: CGFloat, to window: NSWindow) {
-        let unlimited = CGFloat.greatestFiniteMagnitude
-        switch mode {
-        case .drop:
-            window.contentMinSize = NSSize(width: 620, height: contentHeight)
-            window.contentMaxSize = NSSize(width: unlimited, height: contentHeight)
-        case .edit:
-            window.contentMinSize = NSSize(width: 620, height: 340)
-            window.contentMaxSize = NSSize(width: unlimited, height: unlimited)
-        }
-    }
-
-    func selectRecipe(_ recipe: FilmRecipe) {
-        selectedRecipeID = recipe.id
-        self.recipe = recipe
-        persistRecipeSelection()
-        schedulePreview()
-    }
-
-    func recipeDidChange() {
-        persistRecipeSelection()
-        schedulePreview()
-    }
-
-    /// Asks for a name and canister for the current settings.
-    func beginSavingRecipe() {
-        isSavingRecipe = true
-    }
-
-    /// The name offered when saving: the recipe being edited, if it's one of ours.
-    var suggestedRecipeName: String {
-        isSelectedRecipeCustom ? recipe.name : "My Recipe"
-    }
-
-    /// Saves the current settings as a new recipe and puts it to use.
-    @discardableResult
-    func saveCurrentAsRecipe(named proposedName: String, canister: String) -> FilmRecipe? {
-        let name = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return nil }
-
-        var recipe = recipe
-        recipe.id = "custom-\(UUID().uuidString)"
-        recipe.name = name
-        recipe.canister = canister
-        savedRecipes.append(recipe)
-        persistRecipes()
-        selectRecipe(recipe)
-        statusMessage = "Saved recipe “\(name)”"
-        return recipe
-    }
-
-    func updateSelectedRecipe() {
-        guard let index = savedRecipes.firstIndex(where: { $0.id == selectedRecipeID }) else { return }
-        var updated = recipe
-        updated.id = savedRecipes[index].id
-        updated.name = savedRecipes[index].name
-        updated.canister = savedRecipes[index].canister
-        savedRecipes[index] = updated
-        recipe = updated
-        persistRecipes()
-        persistRecipeSelection()
-        statusMessage = "Updated recipe “\(updated.name)”"
-    }
-
-    func deleteSelectedRecipe() {
-        guard let index = savedRecipes.firstIndex(where: { $0.id == selectedRecipeID }) else { return }
-        let name = savedRecipes[index].name
-
-        let alert = NSAlert()
-        alert.messageText = "Delete “\(name)”?"
-        alert.informativeText = "This recipe will be permanently deleted. This cannot be undone."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.buttons.first?.hasDestructiveAction = true
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        savedRecipes.remove(at: index)
-        persistRecipes()
-        selectRecipe(.classic35)
-        statusMessage = "Deleted recipe “\(name)”"
-    }
-
-    func renameRecipe(id: String, to proposedName: String) -> Bool {
-        let name = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty,
-              !savedRecipes.contains(where: { $0.id != id && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }),
-              let index = savedRecipes.firstIndex(where: { $0.id == id }) else { return false }
-
-        savedRecipes[index].name = name
-        if selectedRecipeID == id {
-            recipe.name = name
-            persistRecipeSelection()
-        }
-        persistRecipes()
-        statusMessage = "Renamed recipe to “\(name)”"
-        return true
-    }
-
-    /// Packages a saved recipe in a canister from the library.
-    func setCanister(_ canister: String, forRecipe id: String) {
-        guard let index = savedRecipes.firstIndex(where: { $0.id == id }) else { return }
-        savedRecipes[index].canister = canister
-        if selectedRecipeID == id {
-            recipe.canister = canister
-            persistRecipeSelection()
-        }
-        persistRecipes()
-    }
-
-    func deleteRecipe(id: String) {
-        guard let index = savedRecipes.firstIndex(where: { $0.id == id }) else { return }
-        let wasSelected = selectedRecipeID == id
-        let name = savedRecipes[index].name
-        savedRecipes.remove(at: index)
-        persistRecipes()
-        if wasSelected {
-            selectRecipe(.classic35)
-        }
-        statusMessage = "Deleted recipe “\(name)”"
-    }
-
-    func resetLightShaping() {
-        recipe.lightShaping = currentRecipe.lightShaping
-        schedulePreview()
-    }
-
-    func resetTone() {
-        recipe.tone = currentRecipe.tone
-        schedulePreview()
-    }
-
-    func resetLensBlur() {
-        recipe.lensBlur = currentRecipe.lensBlur
-        schedulePreview()
-    }
-
-    func resetDiffusion() {
-        recipe.diffusion = currentRecipe.diffusion
-        schedulePreview()
-    }
-
-    func resetHalation() {
-        recipe.halation = currentRecipe.halation
-        schedulePreview()
-    }
-
-    func resetLandscapeGlow() {
-        recipe.landscapeGlow = currentRecipe.landscapeGlow
-        schedulePreview()
-    }
-
-    func resetGrain() {
-        recipe.grain = currentRecipe.grain
-        schedulePreview()
-    }
-
-    func randomizeGrain() {
-        recipe.grain.seed = UInt32.random(in: 1 ..< 1_000_003)
-        schedulePreview()
-    }
-
-    func chooseImages() {
-        switch operationMode {
-        case .drop:
-            chooseImagesForDroplet()
-        case .edit:
-            chooseImageForEditing()
-        }
-    }
-
-    func chooseImagesForDroplet() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose Images to Process"
-        panel.allowedContentTypes = Self.supportedImageTypes
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        guard panel.runModal() == .OK else { return }
-        Task { await processInstantly(panel.urls) }
-    }
-
-    func chooseImageForEditing() {
-        let panel = NSOpenPanel()
-        panel.title = "Open Image"
-        panel.allowedContentTypes = Self.supportedImageTypes
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        guard panel.runModal() == .OK else { return }
-        openForEditing(panel.urls)
-    }
-
-    func openForEditing(_ urls: [URL]) {
-        guard let url = urls.first(where: Self.isSupportedImage) else {
-            statusMessage = "Choose a JPEG, HEIC, PNG, or TIFF image"
-            return
-        }
-        guard let image = NSImage(contentsOf: url) else {
-            statusMessage = "Couldn’t open \(url.lastPathComponent)"
-            return
-        }
-
-        retainSecurityScope(for: url)
-        previewTask?.cancel()
-        previewTask = nil
-        selectedSourceURL = url
-        sourcePreview = image
-        processedPreview = nil
-        showOriginal = false
-        operationMode = .edit
-        statusMessage = "Rendering preview…"
-        scheduleWindowResize(for: .edit, animated: true)
-        schedulePreview()
-    }
-
-    func closeEditorImage() {
-        previewTask?.cancel()
-        previewTask = nil
-        selectedSourceURL = nil
-        sourcePreview = nil
-        processedPreview = nil
-        showOriginal = false
-        isRenderingPreview = false
-        statusMessage = "Ready"
-    }
-
-    func chooseDropOutputFolder() {
-        guard let url = chooseFolder(title: "Choose Instant Output Folder") else { return }
-        setFolder(url, key: BookmarkKey.dropOutput) { dropOutputFolder = $0 }
-    }
-
-    func chooseWatchedInputFolder() {
-        guard let url = chooseFolder(title: "Choose Incoming Folder") else { return }
-        let shouldResume = isWatching
-        if setFolder(url, key: BookmarkKey.watchInput, assignment: { watchedInputFolder = $0 }), shouldResume {
-            startWatching()
-        }
-    }
-
-    func chooseWatchedOutputFolder() {
-        guard let url = chooseFolder(title: "Choose Finished Folder") else { return }
-        let shouldResume = isWatching
-        if setFolder(url, key: BookmarkKey.watchOutput, assignment: { watchedOutputFolder = $0 }), shouldResume {
-            startWatching()
-        }
-    }
-
-    @discardableResult
-    func processInstantly(_ urls: [URL], destinationOverride: URL? = nil) async -> Set<URL> {
-        persistRecipeSelection()
-        let supported = urls.filter(Self.isSupportedImage)
-        guard !supported.isEmpty else {
-            statusMessage = "No supported images in that drop"
-            return []
-        }
-
-        if dropOutputFolder == nil, destinationOverride == nil {
-            chooseDropOutputFolder()
-        }
-        guard let destination = destinationOverride ?? dropOutputFolder else {
-            statusMessage = "Choose an output folder to continue"
-            return []
-        }
-        guard Self.isExistingDirectory(destination) else {
-            let message = destinationOverride == nil
-                ? "Instant output folder is no longer available. Choose it again."
-                : "Finished folder is no longer available. Choose it again."
-            statusMessage = message
-            if destinationOverride != nil {
-                watchErrorMessage = message
-                watchStatusMessage = message
-            }
-            return []
-        }
-        guard let processingService else {
-            statusMessage = startupError ?? "The image engine is unavailable"
-            return []
-        }
-
-        var completed: Set<URL> = []
-        for url in supported {
-            let job = ProcessingJob(sourceURL: url, state: .queued)
-            jobs.insert(job, at: 0)
-            let id = job.id
-            updateJob(id, state: .processing)
-            statusMessage = "Processing \(url.lastPathComponent)…"
-
-            let gainedSourceAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if gainedSourceAccess { url.stopAccessingSecurityScopedResource() }
-            }
-
-            do {
-                let output = try await processingService.process(
-                    sourceURL: url,
-                    destinationFolder: destination,
-                    recipe: recipe,
-                    options: outputOptions
-                )
-                updateJob(id, state: .finished(output))
-                statusMessage = "Finished \(url.lastPathComponent)"
-                completed.insert(url)
-                if destinationOverride != nil {
-                    watchErrorMessage = nil
-                    watchStatusMessage = "Finished \(url.lastPathComponent)"
-                }
-            } catch {
-                updateJob(id, state: .failed(error.localizedDescription))
-                let message = "Couldn’t process \(url.lastPathComponent): \(error.localizedDescription)"
-                statusMessage = message
-                if destinationOverride != nil {
-                    watchErrorMessage = message
-                    watchStatusMessage = message
-                }
-            }
-        }
-        return completed
-    }
-
-    func exportEditedImage() {
-        guard let sourceURL = selectedSourceURL else { return }
-        let type = resolvedOutputType(for: sourceURL)
-        let panel = NSSavePanel()
-        panel.title = "Export Filmified Image"
-        panel.prompt = "Export"
-        panel.allowedContentTypes = [type]
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = sourceURL.deletingPathExtension().lastPathComponent
-            + " — Granular."
-            + (type.preferredFilenameExtension ?? "tiff")
-        guard panel.runModal() == .OK, let destinationURL = panel.url else { return }
-
-        Task { await exportEditor(sourceURL: sourceURL, destinationURL: destinationURL) }
-    }
-
-    private func exportEditor(sourceURL: URL, destinationURL: URL) async {
-        guard let processingService else { return }
-        persistRecipeSelection()
-        let job = ProcessingJob(sourceURL: sourceURL, state: .processing)
-        jobs.insert(job, at: 0)
-        isExporting = true
-        statusMessage = "Exporting \(destinationURL.lastPathComponent)…"
-        defer { isExporting = false }
-
-        do {
-            let output = try await processingService.process(
-                sourceURL: sourceURL,
-                destinationURL: destinationURL,
-                recipe: recipe,
-                options: outputOptions
-            )
-            updateJob(job.id, state: .finished(output))
-            statusMessage = "Exported \(output.lastPathComponent)"
-        } catch {
-            updateJob(job.id, state: .failed(error.localizedDescription))
-            statusMessage = "Export failed: \(error.localizedDescription)"
-        }
-    }
-
-    /// Renders the preview live: one render at a time, and any changes made
-    /// while it runs are picked up as soon as it finishes, so dragging a
-    /// slider never queues up stale renders.
-    func schedulePreview() {
-        guard operationMode == .edit, selectedSourceURL != nil, processingService != nil else {
-            return
-        }
-        isRenderingPreview = true
-        previewNeedsRender = true
-        guard previewTask == nil else { return }
-        previewTask = Task { await renderPendingPreviews() }
-    }
-
-    private func renderPendingPreviews() async {
-        while previewNeedsRender, !Task.isCancelled,
-              let sourceURL = selectedSourceURL, let processingService {
-            previewNeedsRender = false
-            do {
-                let image = try await processingService.renderPreview(
-                    sourceURL: sourceURL,
-                    recipe: recipe,
-                    maximumDimension: 2_400
-                )
-                guard !Task.isCancelled else { return }
-                processedPreview = NSImage(cgImage: image, size: .zero)
-                statusMessage = sourceURL.lastPathComponent
-            } catch {
-                guard !Task.isCancelled else { return }
-                statusMessage = "Preview failed: \(error.localizedDescription)"
-            }
-        }
-        guard !Task.isCancelled else { return }
-        isRenderingPreview = false
-        previewTask = nil
-    }
-
-    /// Renders a small Film Tone preview of every stock for the stock picker,
-    /// using the open image or a generated color swatch. Existing tiles
-    /// stay visible until their replacements arrive, one stock at a time.
-    func refreshStockThumbnails() {
-        guard let processingService else { return }
-        var tone = recipe.tone
-        tone.isEnabled = true
-        tone.stock = .none
-        let key = StockThumbnailKey(sourceURL: selectedSourceURL, tone: tone)
-        guard key != stockThumbnailKey else { return }
-
-        if stockThumbnailKey?.sourceURL != key.sourceURL {
-            stockThumbnails = [:]
-        }
-        let isRefresh = !stockThumbnails.isEmpty
-        stockThumbnailKey = key
-        stockThumbnailTask?.cancel()
-        stockThumbnailTask = Task {
-            if isRefresh {
-                try? await Task.sleep(for: .milliseconds(150))
-            }
-            for stock in FilmStockID.allCases {
-                guard !Task.isCancelled else { return }
-                guard let image = try? await processingService.renderStockThumbnail(
-                    sourceURL: key.sourceURL,
-                    tone: tone,
-                    stock: stock,
-                    maximumPixelSize: Self.stockThumbnailPixelSize
-                ), !Task.isCancelled else { continue }
-                stockThumbnails[stock] = NSImage(cgImage: image, size: .zero)
-            }
-        }
-    }
-
-    func toggleWatching() {
-        if isWatching {
-            stopWatching()
-        } else {
-            startWatching()
-        }
-    }
-
-    func startWatching() {
-        guard let input = watchedInputFolder, let output = watchedOutputFolder else {
-            let message = "Choose both watched folders first."
-            statusMessage = message
-            watchErrorMessage = message
-            watchStatusMessage = message
-            isWatching = false
-            return
-        }
-        guard Self.isExistingDirectory(input) else {
-            let message = "Incoming folder is no longer available. Choose it again."
-            statusMessage = message
-            watchErrorMessage = message
-            watchStatusMessage = message
-            isWatching = false
-            return
-        }
-        guard Self.isExistingDirectory(output) else {
-            let message = "Finished folder is no longer available. Choose it again."
-            statusMessage = message
-            watchErrorMessage = message
-            watchStatusMessage = message
-            isWatching = false
-            return
-        }
-        guard input.standardizedFileURL != output.standardizedFileURL else {
-            let message = "Incoming and Finished must be different folders."
-            statusMessage = message
-            watchErrorMessage = message
-            watchStatusMessage = message
-            isWatching = false
-            return
-        }
-        guard !output.path.hasPrefix(input.path + "/") else {
-            let message = "Finished cannot be inside Incoming."
-            statusMessage = message
-            watchErrorMessage = message
-            watchStatusMessage = message
-            isWatching = false
-            return
-        }
-
-        if let existingMonitor = monitor {
-            Task { await existingMonitor.stop() }
-        }
-        let monitor = WatchedFolderMonitor()
-        self.monitor = monitor
-        isWatching = true
-        showMenuBarExtra = true
-        watchErrorMessage = nil
-        watchStatusMessage = "Watching \(input.lastPathComponent)"
-        statusMessage = watchStatusMessage
-        Task {
-            await monitor.start(folder: input) { [weak self] urls in
-                guard let self else { return [] }
-                return await self.processInstantly(urls, destinationOverride: output)
-            } errorHandler: { [weak self] message in
-                await monitor.stop()
-                guard let self else { return }
-                await self.watchingFailed(message)
-            }
-        }
-    }
-
-    func stopWatching() {
-        if let monitor {
-            Task { await monitor.stop() }
-        }
-        monitor = nil
-        isWatching = false
-        showMenuBarExtra = false
-        watchErrorMessage = nil
-        watchStatusMessage = "Watching paused"
-        statusMessage = watchStatusMessage
-    }
-
-    func reveal(_ url: URL?) {
-        guard let url else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
-
-    func revealLastOutput() {
-        reveal(lastFinishedURL)
-    }
-
-    func setLaunchAtLogin(_ enabled: Bool) {
-        do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-        } catch {
-            statusMessage = "Launch at Login: \(error.localizedDescription)"
-        }
-    }
-
-    private func updateJob(_ id: UUID, state: JobState) {
-        guard let index = jobs.firstIndex(where: { $0.id == id }) else { return }
-        jobs[index].state = state
-    }
-
-    private func chooseFolder(title: String) -> URL? {
-        let panel = NSOpenPanel()
-        panel.title = title
-        panel.prompt = "Choose"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        return panel.runModal() == .OK ? panel.url : nil
-    }
-
-    @discardableResult
-    private func setFolder(_ url: URL, key: String, assignment: (URL) -> Void) -> Bool {
-        do {
-            let data = try url.bookmarkData(options: .withSecurityScope)
-            UserDefaults.standard.set(data, forKey: key)
-            retainSecurityScope(for: url)
-            assignment(url)
-            watchErrorMessage = nil
-            return true
-        } catch {
-            statusMessage = "Couldn’t remember that folder: \(error.localizedDescription)"
-            return false
-        }
-    }
-
-    private func watchingFailed(_ message: String) {
-        guard isWatching else { return }
-        monitor = nil
-        isWatching = false
-        watchErrorMessage = message
-        watchStatusMessage = message
-        statusMessage = message
-    }
-
-    private func restoreFolder(forKey key: String, assignment: (URL) -> Void) {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return }
-        do {
-            var isStale = false
-            let url = try URL(
-                resolvingBookmarkData: data,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-            retainSecurityScope(for: url)
-            assignment(url)
-            if isStale {
-                let refreshed = try url.bookmarkData(options: .withSecurityScope)
-                UserDefaults.standard.set(refreshed, forKey: key)
-            }
-        } catch {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-    }
-
-    private func retainSecurityScope(for url: URL) {
-        guard !activeSecurityURLs.contains(url) else { return }
-        if url.startAccessingSecurityScopedResource() {
-            activeSecurityURLs.append(url)
-        }
-    }
-
-    private func restoreRecipes() {
-        guard let data = UserDefaults.standard.data(forKey: RecipeKey.saved),
-              let decoded = try? JSONDecoder().decode([FilmRecipe].self, from: data) else { return }
-        savedRecipes = decoded
-    }
-
-    private func persistRecipes() {
-        guard let data = try? JSONEncoder().encode(savedRecipes) else { return }
-        UserDefaults.standard.set(data, forKey: RecipeKey.saved)
-    }
-
-    private func restoreRecipeSelection() {
-        let defaults = UserDefaults.standard
-        guard let storedID = defaults.string(forKey: RecipeKey.selectedID),
-              let selected = availableRecipes.first(where: { $0.id == storedID }) else {
-            selectRecipe(.classic35)
-            return
-        }
-
-        selectedRecipeID = selected.id
-        if defaults.bool(forKey: RecipeKey.isModified),
-           let data = defaults.data(forKey: RecipeKey.working),
-           var working = try? JSONDecoder().decode(FilmRecipe.self, from: data) {
-            // Keep the originating recipe identity so Reset and Update still work.
-            working.id = selected.id
-            working.name = selected.name
-            recipe = working
-        } else {
-            recipe = selected
-        }
-        persistRecipeSelection()
-    }
-
-    private func persistRecipeSelection() {
-        let defaults = UserDefaults.standard
-        defaults.set(selectedRecipeID, forKey: RecipeKey.selectedID)
-        defaults.set(isRecipeModified, forKey: RecipeKey.isModified)
-        if let data = try? JSONEncoder().encode(recipe) {
-            defaults.set(data, forKey: RecipeKey.working)
-        }
-    }
-
-    private func resolvedOutputType(for sourceURL: URL) -> UTType {
-        switch outputOptions.format {
-        case .jpeg: .jpeg
-        case .heic: .heic
-        case .png: .png
-        case .tiff: .tiff
-        case .sameAsSource:
-            switch sourceURL.pathExtension.lowercased() {
-            case "jpg", "jpeg": .jpeg
-            case "heic", "heif": .heic
-            case "png": .png
-            default: .tiff
-            }
-        }
-    }
-
-    private static let supportedImageTypes: [UTType] = [.jpeg, .heic, .png, .tiff]
-
-    private static func isSupportedImage(_ url: URL) -> Bool {
+    static func isSupportedImage(_ url: URL) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension.lowercased()) else { return false }
         return supportedImageTypes.contains(type)
     }
 
-    private static func isExistingDirectory(_ url: URL) -> Bool {
+    static func isExistingDirectory(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
             && isDirectory.boolValue
     }
-}
-
-private enum BookmarkKey {
-    static let dropOutput = "folders.dropOutput"
-    static let watchInput = "folders.watchInput"
-    static let watchOutput = "folders.watchOutput"
-}
-
-private enum RecipeKey {
-    static let saved = "recipes.saved"
-    static let selectedID = "recipes.selectedID"
-    static let working = "recipes.working"
-    static let isModified = "recipes.isModified"
 }

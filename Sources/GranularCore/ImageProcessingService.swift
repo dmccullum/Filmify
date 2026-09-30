@@ -26,10 +26,16 @@ public actor ImageProcessingService {
 
     /// The open image decoded once at preview size. Every effect scales with
     /// the image's short edge, so rendering from it matches the full-size look.
+    /// A couple of sizes are kept, so a quick preview while adjusting and a
+    /// sharper one for a zoomed-in view don't decode the file in turn.
     private func previewSource(for url: URL, maximumDimension: CGFloat) throws -> CIImage {
-        if let cached = previewSourceCache,
-           cached.url == url,
-           cached.maximumDimension == maximumDimension {
+        if previewSourceURL != url {
+            previewSourceURL = url
+            previewSources = []
+        }
+        if let index = previewSources.firstIndex(where: { $0.maximumDimension == maximumDimension }) {
+            let cached = previewSources.remove(at: index)
+            previewSources.append(cached)
             return cached.image
         }
         let source = try renderer.loadImage(at: url)
@@ -39,11 +45,16 @@ public actor ImageProcessingService {
                 .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             : source
         let image = try exporter.materialize(scaled)
-        previewSourceCache = (url, maximumDimension, image)
+        previewSources.append((maximumDimension, image))
+        if previewSources.count > 2 {
+            previewSources.removeFirst()
+        }
         return image
     }
 
-    private var previewSourceCache: (url: URL, maximumDimension: CGFloat, image: CIImage)?
+    private var previewSourceURL: URL?
+    /// Least recently used first.
+    private var previewSources: [(maximumDimension: CGFloat, image: CIImage)] = []
 
     /// Renders a small Film Tone preview of one stock for the stock picker. With
     /// no source image, a generated color swatch stands in.
@@ -133,6 +144,7 @@ public actor ImageProcessingService {
             image: rendered,
             sourceURL: sourceURL,
             destinationFolder: destinationFolder,
+            recipeName: recipe.name,
             options: options
         )
     }
