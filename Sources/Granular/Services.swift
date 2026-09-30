@@ -28,7 +28,7 @@ final class ImageServiceProvider: NSObject {
         }
 
         // Stay in the background unless there’s a folder to ask for.
-        if model.dropOutputFolder == nil {
+        if model.dropOutputFolder == nil || model.asksWhereToSaveInstantly {
             NSApp.activate()
         }
         Task { await model.processInstantly(images) }

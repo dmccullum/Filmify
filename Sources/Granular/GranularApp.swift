@@ -35,6 +35,33 @@ final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Frames developed under Ask Each Time live in a temporary folder until
+    /// they're saved, so quitting would quietly lose them.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model = ImageServiceProvider.shared.model, !model.unsavedJobIDs.isEmpty else {
+            return .terminateNow
+        }
+        let count = model.unsavedJobIDs.count
+        let alert = NSAlert()
+        alert.messageText = count == 1
+            ? "Save the unsaved image before quitting?"
+            : "Save \(count) unsaved images before quitting?"
+        alert.informativeText = "If you don’t save, they’ll be discarded."
+        alert.addButton(withTitle: "Save…")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Don’t Save").hasDestructiveAction = true
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            NSApp.activate()
+            model.saveAllUnsaved()
+            return .terminateCancel
+        case .alertThirdButtonReturn:
+            return .terminateNow
+        default:
+            return .terminateCancel
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
