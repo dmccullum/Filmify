@@ -284,10 +284,21 @@ private struct SettingsFolderRow: View {
     var body: some View {
         LabeledContent(title) {
             HStack(spacing: 8) {
-                Text(url?.path(percentEncoded: false) ?? "Not selected")
-                    .foregroundStyle(url == nil ? Color.secondary : Color.primary)
+                if let url {
+                    Label {
+                        Text(url.lastPathComponent)
+                    } icon: {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path(percentEncoded: false)))
+                            .resizable()
+                            .frame(width: 16, height: 16)
+                    }
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .help(abbreviatedPath(url))
+                } else {
+                    Text("Not selected")
+                        .foregroundStyle(.secondary)
+                }
                 Button("Choose…", action: choose)
                 if let reveal {
                     Button(action: reveal) {
@@ -300,6 +311,11 @@ private struct SettingsFolderRow: View {
                 }
             }
         }
+    }
+
+    /// The full path for the tooltip, with the home folder as ~.
+    private func abbreviatedPath(_ url: URL) -> String {
+        (url.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath
     }
 }
 

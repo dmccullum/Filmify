@@ -7,19 +7,22 @@ struct InstantCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .importExport) {
-            Divider()
+            // Both act on the film strip, so Edit mode's File menu leaves them out.
+            if model.operationMode == .drop {
+                Divider()
 
-            Button(quickLookTitle) {
-                FramePreviewController.shared.togglePanel()
-            }
-            .keyboardShortcut("y")
-            .disabled(model.operationMode != .drop || roll.selectedFrameID == nil)
+                Button(quickLookTitle) {
+                    FramePreviewController.shared.togglePanel()
+                }
+                .keyboardShortcut("y")
+                .disabled(roll.selectedFrameID == nil)
 
-            Button("Cancel Processing") {
-                model.cancelInstantProcessing()
+                Button("Cancel Processing") {
+                    model.cancelInstantProcessing()
+                }
+                .keyboardShortcut(".")
+                .disabled(!model.canCancelProcessing)
             }
-            .keyboardShortcut(".")
-            .disabled(!model.canCancelProcessing)
         }
     }
 
