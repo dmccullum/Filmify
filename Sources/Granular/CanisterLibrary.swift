@@ -122,6 +122,58 @@ struct CanisterDesign: Identifiable, Hashable {
             layout: .sash(face: 0x3A3D40, stripe: 0xC8102E, edge: 0xE8E8E8, name: 0xF4F4F0, detail: 0xE8E8E8),
             steelCaps: true
         ),
+        // Yellow-box consumer and pro stocks.
+        CanisterDesign(
+            id: "goldhour", name: "Gold Hour",
+            layout: .split(panel: 0xC8102E, panelText: 0xF6B800, face: 0xF6B800, name: 0xC8102E, detail: 0x141414),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "portrait", name: "Portrait",
+            layout: .bands(face: 0xF7F3EA, band: 0xD9A21B, accent: 0x7A5A2A, name: 0x3A2A17, detail: 0xB07A12),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "saturate", name: "Saturate",
+            layout: .sash(face: 0xF6B800, stripe: 0xD52B1E, edge: 0x141414, name: 0x141414, detail: 0xD52B1E),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "pushed", name: "Pushed",
+            layout: .split(panel: 0x141414, panelText: 0xF6B800, face: 0xF6B800, name: 0x141414, detail: 0xC8102E),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "slideshow", name: "Slide Show",
+            layout: .stripes(face: 0xF6B800, stripes: [0xE0453A, 0xC8102E, 0x141414], name: 0x141414, detail: 0xC8102E),
+            steelCaps: false
+        ),
+        // Green-box stocks from the other side of the Pacific.
+        CanisterDesign(
+            id: "evergreen", name: "Evergreen",
+            layout: .split(panel: 0x00843D, panelText: 0xF4F4F0, face: 0xF4F4F0, name: 0x00843D, detail: 0xC8102E),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "velvet", name: "Velvet",
+            layout: .bands(face: 0xF4F2EC, band: 0x4B2C6F, accent: 0x00843D, name: 0x4B2C6F, detail: 0x00843D),
+            steelCaps: false
+        ),
+        CanisterDesign(
+            id: "reversal", name: "Reversal",
+            layout: .sash(face: 0xF4F4F0, stripe: 0x1F4E9A, edge: 0x00843D, name: 0x141414, detail: 0x1F4E9A),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "finegrain", name: "Fine Grain",
+            layout: .split(panel: 0x00843D, panelText: 0x141414, face: 0x141414, name: 0xF4F4F0, detail: 0x7FC49A),
+            steelCaps: true
+        ),
+        CanisterDesign(
+            id: "studio", name: "Studio",
+            layout: .stripes(face: 0xF4F4F0, stripes: [0x0B5A33, 0x00843D, 0x5DB47E, 0xA9D9B8], name: 0x0B5A33, detail: 0x00843D),
+            steelCaps: true
+        ),
         tape
     ]
 
