@@ -170,10 +170,16 @@ private struct OutputSettings: View {
                             prompt: Text(OutputNaming.defaultTemplate)
                         )
                         .labelsHidden()
-                        .frame(width: 220)
+                        // A visible field, so it reads as something to type in.
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 200)
                         Menu {
                             ForEach(OutputNaming.tokens, id: \.self) { token in
-                                Button(token) { model.outputOptions.filenameTemplate += token }
+                                Button {
+                                    model.outputOptions.filenameTemplate += token
+                                } label: {
+                                    Text(tokenTitle(token)) + Text("  \(token)").foregroundStyle(.secondary)
+                                }
                             }
                             Divider()
                             Button("Reset to Default") {
@@ -181,9 +187,10 @@ private struct OutputSettings: View {
                             }
                             .disabled(model.outputOptions.filenameTemplate == OutputNaming.defaultTemplate)
                         } label: {
-                            Image(systemName: "curlybraces")
+                            Label("Insert", systemImage: "plus")
                         }
-                        .menuStyle(.borderlessButton)
+                        .menuStyle(.button)
+                        .buttonStyle(.bordered)
                         .fixedSize()
                         .help("Insert a token or reset the filename")
                         .accessibilityLabel("Filename tokens")
@@ -200,6 +207,17 @@ private struct OutputSettings: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// What each filename token stands for, in the Insert menu.
+    private func tokenTitle(_ token: String) -> String {
+        switch token {
+        case "{name}": "Original Name"
+        case "{recipe}": "Recipe Name"
+        case "{date}": "Date"
+        case "{counter}": "Counter"
+        default: token
         }
     }
 

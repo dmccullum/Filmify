@@ -58,11 +58,11 @@ extension AppModel {
         }
     }
 
-    /// Where the window goes for a mode: the frame it had the last time the
-    /// user left it there, if that place still exists, otherwise the mode’s
-    /// default size around the window’s current top centre. Either way it is
-    /// kept on screen.
-    func targetFrame(for mode: OperationMode, in window: NSWindow) -> NSRect {
+    /// Where the window goes for a mode: the size it had the last time the
+    /// user left it there, or else the mode’s default. Switching modes grows
+    /// and shrinks it in place around its top centre; only at launch does it
+    /// go back to where it was left. Either way it is kept on screen.
+    func targetFrame(for mode: OperationMode, in window: NSWindow, keepingPlace: Bool = true) -> NSRect {
         let defaultSize = window.frameRect(
             forContentRect: NSRect(origin: .zero, size: Self.defaultContentSizes[mode]!)
         ).size
@@ -77,6 +77,11 @@ extension AppModel {
                 // Only Instant’s width and place are remembered; its height is fixed.
                 frame.size.height = defaultSize.height
                 frame.origin.y = saved.maxY - defaultSize.height
+            }
+            if keepingPlace {
+                let current = window.frame
+                frame.origin = NSPoint(x: current.midX - frame.width / 2, y: current.maxY - frame.height)
+                visible = window.screen?.visibleFrame ?? home
             }
         } else {
             let current = window.frame
@@ -114,7 +119,8 @@ extension AppModel {
 
     func resizeWindow(for mode: OperationMode, animated: Bool) async {
         guard let window = mainWindow else { return }
-        let targetFrame = targetFrame(for: mode, in: window)
+        // A mode switch resizes in place; the first sizing at launch restores the place too.
+        let targetFrame = targetFrame(for: mode, in: window, keepingPlace: animated)
         let contentHeight = window.contentRect(forFrameRect: targetFrame).height
 
         // Instant mode keeps a fixed height and a free width. Lift the limit
