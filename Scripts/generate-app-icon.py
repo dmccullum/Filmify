@@ -90,6 +90,10 @@ COLOR = {
     "black": ("#000000", "#1D1D20", "#55575E"), "cap": ("#0E0E10", "#5A5C63"),
     "film": ("#E8893A", "#C9631F", "#A04A14", "#6E300B"), "lip": "#0c0a09", "lipline": "#2d2622",
 }
+# Dark mode draws its own near-black backdrop (the fill below is ignored there), so the
+# black face, lip and caps are lifted to charcoal and steel to stand clear of it.
+DARK = dict(COLOR, black=("#141417", "#3A3C42", "#80838B"), cap=("#2A2B30", "#B4B7BE"),
+            lip="#2B2725", lipline="#4D4540")
 # Four clear values: bright canister, mid film, black face and lip, dark cap.
 MONO = {
     "yellow": ("#5C5C5C", "#EDEDED", "#FFFFFF"), "red": ("#2A2A2A", "#5E5E5E", "#8A8A8A"),
@@ -162,10 +166,13 @@ def film_svg(P):
             '<stop offset="0.6" stop-color="#FFD2A8" stop-opacity="0.18"/><stop offset="0.8" stop-color="#FFD2A8" stop-opacity="0"/></linearGradient>' % x0)
     return svg(defs, '<path fill="url(#f)" fill-rule="evenodd" d="%s"/><path fill="url(#g)" fill-rule="evenodd" d="%s"/>' % (d, d))
 
-def layer(name):
+def layer(name, dark=False):
     # No plain "image-name": when it's present, Icon Composer ignores the specializations.
-    return {"name": name,
-            "image-name-specializations": [{"value": name + ".svg"}, {"appearance": "tinted", "value": name + "-mono.svg"}]}
+    specs = [{"value": name + ".svg"}]
+    if dark:
+        specs.append({"appearance": "dark", "value": name + "-dark.svg"})
+    specs.append({"appearance": "tinted", "value": name + "-mono.svg"})
+    return {"name": name, "image-name-specializations": specs}
 def group(name, layers, translucency=0.0, shadow="neutral"):
     return {"name": name, "layers": layers, "shadow": {"kind": shadow, "opacity": 0.5}, "specular": True,
             "translucency": {"enabled": translucency > 0, "value": translucency}}
@@ -174,6 +181,8 @@ shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT + "/Assets")
 for name, build in {"cap": cap_svg, "body": body_svg, "film": film_svg}.items():
     open("%s/Assets/%s.svg" % (OUT, name), "w").write(build(COLOR))
     open("%s/Assets/%s-mono.svg" % (OUT, name), "w").write(build(MONO))
+    if name != "film":
+        open("%s/Assets/%s-dark.svg" % (OUT, name), "w").write(build(DARK))
 
 aluminum = lin("#E2E4E6", "#AEB2B6", 0.2, 0.0, 0.8, 1.0)     # bead-blasted aluminum body
 magnesium = lin("#26272A", "#0B0C0D", 0.2, 0.0, 0.8, 1.0)    # dark magnesium body
@@ -181,7 +190,7 @@ doc = {
     "fill": aluminum,
     "fill-specializations": [{"value": aluminum}, {"appearance": "dark", "value": magnesium}],
     "groups": [
-        group("Canister", [layer("cap"), layer("body")]),
+        group("Canister", [layer("cap", dark=True), layer("body", dark=True)]),
         group("Film", [layer("film")], translucency=0.1, shadow="layer-color"),
     ],
     "supported-platforms": {"circles": ["watchOS"], "squares": "shared"},

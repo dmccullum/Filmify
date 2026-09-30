@@ -65,6 +65,10 @@
               "value": "cap.svg"
             },
             {
+              "appearance": "dark",
+              "value": "cap-dark.svg"
+            },
+            {
               "appearance": "tinted",
               "value": "cap-mono.svg"
             }
@@ -75,6 +79,10 @@
           "image-name-specializations": [
             {
               "value": "body.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "body-dark.svg"
             },
             {
               "appearance": "tinted",
