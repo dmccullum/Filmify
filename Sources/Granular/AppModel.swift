@@ -136,6 +136,11 @@ final class AppModel {
 
     // MARK: Undo state
     // Keep each area's new stored state under its own mark.
+    /// The main window's undo manager, where changes to the adjustments go.
+    @ObservationIgnored weak var undoManager: UndoManager?
+    /// The step a run of changes is joining, such as one slider drag.
+    @ObservationIgnored var openUndoStep: OpenUndoStep?
+    @ObservationIgnored var adjustmentChangeDepth = 0
 
     // MARK: Viewer state
     // Keep each area's new stored state under its own mark.
@@ -184,18 +189,22 @@ final class AppModel {
         let x = min(1, max(0, x))
         let y = min(1, max(0, y))
 
-        switch target {
-        case .vignette:
-            recipe.lightShaping.centerX = x
-            recipe.lightShaping.centerY = y
-        case .lensBlur:
-            recipe.lensBlur.focusX = x
-            recipe.lensBlur.focusY = y
+        // Each drag of the target is one step on Edit ▸ Undo.
+        changeAdjustments("Move \(target.title) Center", coalescingKey: target) {
+            switch target {
+            case .vignette:
+                recipe.lightShaping.centerX = x
+                recipe.lightShaping.centerY = y
+            case .lensBlur:
+                recipe.lensBlur.focusX = x
+                recipe.lensBlur.focusY = y
+            }
         }
     }
 
     func finishCenterAdjustment() {
         activeCenterTarget = nil
+        endCoalescedChanges()
     }
 
     var availableRecipes: [FilmRecipe] {

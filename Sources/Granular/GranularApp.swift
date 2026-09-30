@@ -27,6 +27,7 @@ struct GranularDesktopApp: App {
         Window("Granular", id: "main") {
             ContentView()
                 .environment(model)
+                .recordingAdjustmentUndo(for: model)
         }
         .defaultSize(width: 700, height: 400)
         .restorationBehavior(.disabled)
