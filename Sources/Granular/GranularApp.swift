@@ -12,6 +12,7 @@ extension Notification.Name {
 final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         ProcessingNotifier.shared.becomeDelegate()
+        NSApp.servicesProvider = ImageServiceProvider.shared
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -62,7 +63,13 @@ final class GranularApplicationDelegate: NSObject, NSApplicationDelegate {
 @main
 struct GranularDesktopApp: App {
     @NSApplicationDelegateAdaptor(GranularApplicationDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var model: AppModel
+
+    init() {
+        let model = AppModel()
+        _model = State(initialValue: model)
+        SystemIntegration.connect(model)
+    }
 
     var body: some Scene {
         @Bindable var model = model
@@ -91,18 +98,19 @@ struct GranularDesktopApp: App {
                 .environment(model)
         }
 
-        MenuBarExtra(
-            "Granular",
-            systemImage: model.isWatching ? "drop.fill" : "drop",
-            isInserted: Binding(
-                get: { model.menuBarVisibility == .always || model.showMenuBarExtra },
-                set: { model.showMenuBarExtra = $0 }
-            )
-        ) {
+        MenuBarExtra(isInserted: Binding(
+            get: { model.menuBarVisibility == .always || model.showMenuBarExtra },
+            set: { model.showMenuBarExtra = $0 }
+        )) {
             MenuBarStatusView()
                 .environment(model)
+        } label: {
+            Image(nsImage: MenuBarGlyph.image(isWatching: model.isWatching))
+                .accessibilityLabel(model.isWatching ? "Granular, watching" : "Granular")
         }
-        .menuBarExtraStyle(.window)
+        // A real menu, like every other menu bar item: keyboard navigation,
+        // type-select, and it gets out of the way as soon as a choice is made.
+        .menuBarExtraStyle(.menu)
     }
 }
 
