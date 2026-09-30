@@ -12,6 +12,8 @@ struct RecipeManagerView: View {
     @State private var isChoosingCanister = false
     @State private var isSavingRecipe = false
     @State private var isHoveringCanister = false
+    @State private var isHoveringName = false
+    @State private var nameSavedAt: Date?
     @FocusState private var isEditingName: Bool
 
     var body: some View {
@@ -128,19 +130,8 @@ struct RecipeManagerView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        TextField("Recipe Name", text: $draftName)
-                            .textFieldStyle(.plain)
-                            .font(.title3.weight(.semibold))
-                            .focused($isEditingName)
-                            .onSubmit { isEditingName = false }
-                        Text(renameError ?? (isInUse(recipe) ? "In use" : "Saved recipe"))
-                            .font(.caption)
-                            .foregroundStyle(renameError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-                        Button("Change Canister…") {
-                            isChoosingCanister = true
-                        }
-                        .buttonStyle(.link)
-                        .font(.caption)
+                        nameField
+                        nameStatus(for: recipe)
                     }
 
                     Spacer(minLength: 8)
@@ -175,6 +166,71 @@ struct RecipeManagerView: View {
                 description: Text("Choose a recipe to rename it or put it to use.")
             )
         }
+    }
+
+    /// The recipe name, which reads as a title at rest but shows a pencil and
+    /// a hover highlight, and becomes a proper field while it's being edited.
+    private var nameField: some View {
+        HStack(spacing: 6) {
+            TextField("Recipe Name", text: $draftName)
+                .textFieldStyle(.plain)
+                .font(.title3.weight(.semibold))
+                .focused($isEditingName)
+                .onSubmit { isEditingName = false }
+                .onExitCommand {
+                    loadDraftName()
+                    isEditingName = false
+                }
+            if !isEditingName {
+                Image(systemName: "pencil")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .opacity(isHoveringName ? 1 : 0.55)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isEditingName
+                      ? AnyShapeStyle(Color(nsColor: .textBackgroundColor))
+                      : AnyShapeStyle(Color.primary.opacity(isHoveringName ? 0.07 : 0)))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(isEditingName ? Color.accentColor : .clear, lineWidth: 2)
+        }
+        // Keep the text aligned with the caption below while the padding
+        // leaves room for the highlight.
+        .padding(.horizontal, -6)
+        .contentShape(Rectangle())
+        .onTapGesture { isEditingName = true }
+        .onHover { isHoveringName = $0 }
+        .animation(.easeOut(duration: 0.12), value: isEditingName)
+        .animation(.easeOut(duration: 0.12), value: isHoveringName)
+        .help(isEditingName ? "" : "Click to rename")
+    }
+
+    @ViewBuilder
+    private func nameStatus(for recipe: FilmRecipe) -> some View {
+        Group {
+            if let renameError {
+                Text(renameError)
+                    .foregroundStyle(.red)
+            } else if isEditingName {
+                Text("Return to save · Esc to cancel")
+                    .foregroundStyle(.secondary)
+            } else if nameSavedAt != nil {
+                Label("Name saved", systemImage: "checkmark")
+                    .foregroundStyle(.green)
+            } else {
+                Text(isInUse(recipe) ? "In use" : "Saved recipe")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption)
+        .transition(.opacity)
     }
 
     private func settings(for recipe: FilmRecipe) -> some View {
@@ -286,6 +342,7 @@ struct RecipeManagerView: View {
     private func loadDraftName() {
         draftName = selectedRecipe?.name ?? ""
         renameError = nil
+        nameSavedAt = nil
     }
 
     private func commitRename() {
@@ -297,8 +354,21 @@ struct RecipeManagerView: View {
         }
         if model.renameRecipe(id: selectedID, to: name) {
             loadDraftName()
+            confirmNameSaved()
         } else {
             renameError = "Use a name that isn’t empty or already taken."
+        }
+    }
+
+    /// Shows "Name saved" for a moment after a rename lands.
+    private func confirmNameSaved() {
+        let savedAt = Date()
+        withAnimation { nameSavedAt = savedAt }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if nameSavedAt == savedAt {
+                withAnimation { nameSavedAt = nil }
+            }
         }
     }
 
