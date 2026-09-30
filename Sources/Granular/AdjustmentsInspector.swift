@@ -774,7 +774,7 @@ private struct SliderDoubleClickReset: NSViewRepresentable {
 
 /// Ends typing in a field when the next click lands anywhere else, which
 /// AppKit doesn't do by itself for clicks on non-focusable content.
-private struct EndEditingOnOutsideClick: NSViewRepresentable {
+struct EndEditingOnOutsideClick: NSViewRepresentable {
     func makeNSView(context: Context) -> WatchingView { WatchingView() }
     func updateNSView(_ view: WatchingView, context: Context) {}
 

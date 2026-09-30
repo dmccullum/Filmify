@@ -307,12 +307,7 @@ private struct RecipeLibraryDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top, spacing: 28) {
-                    VStack(spacing: 8) {
-                        canister
-                        Text("Drag to the Finder to share")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
+                    canister
 
                     VStack(alignment: .leading, spacing: 10) {
                         if isSaved {
@@ -408,6 +403,7 @@ private struct RecipeLibraryDetail: View {
                 .font(.title2.weight(.semibold))
                 .focused($isEditingName)
                 .onSubmit { isEditingName = false }
+                .background(EndEditingOnOutsideClick())
                 .onExitCommand {
                     draftName = recipe.name
                     renameError = nil
@@ -453,9 +449,6 @@ private struct RecipeLibraryDetail: View {
                 if let renameError {
                     Text(renameError)
                         .foregroundStyle(.red)
-                } else if isEditingName {
-                    Text("Return to save · Esc to cancel")
-                        .foregroundStyle(.secondary)
                 } else if nameSavedAt != nil {
                     Label("Name saved", systemImage: "checkmark")
                         .foregroundStyle(.green)
