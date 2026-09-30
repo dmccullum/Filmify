@@ -16,7 +16,7 @@ struct OpenUndoStep {
     let actionName: String
 }
 
-// Undo and redo for the adjustments.
+// Undo and redo for the adjustments, and copying them from photo to photo.
 //
 // Everything is recorded on the main window's own undo manager, so the
 // standard Edit ▸ Undo and Redo items name each step, and text being typed in
@@ -120,11 +120,55 @@ extension AppModel {
               undoManager?.undoActionName == actionName else { return false }
         return true
     }
+
+    // MARK: Copy and paste settings
+
+    /// Copies the adjustments, under Granular's own type and nothing else.
+    func copySettings() {
+        guard let data = try? JSONEncoder().encode(recipe) else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setData(data, forType: .granularAdjustments)
+        refreshSettingsOnPasteboard()
+    }
+
+    /// Applies copied adjustments to the current edit as one undoable step.
+    func pasteSettings() {
+        refreshSettingsOnPasteboard()
+        guard let settingsOnPasteboard else {
+            NSSound.beep()
+            return
+        }
+        changeAdjustments("Paste Settings") {
+            recipe = recipe.applyingAdjustments(of: settingsOnPasteboard)
+        }
+    }
+
+    /// Whether there are copied adjustments that would change anything.
+    var canPasteSettings: Bool {
+        guard let settingsOnPasteboard else { return false }
+        return !recipe.hasSameAdjustments(as: settingsOnPasteboard)
+    }
+
+    /// Reads what's on the pasteboard, if it has changed since last time.
+    func refreshSettingsOnPasteboard() {
+        let pasteboard = NSPasteboard.general
+        guard pasteboard.changeCount != pasteboardChangeCount else { return }
+        pasteboardChangeCount = pasteboard.changeCount
+        settingsOnPasteboard = pasteboard.data(forType: .granularAdjustments)
+            .flatMap { try? JSONDecoder().decode(FilmRecipe.self, from: $0) }
+    }
+}
+
+extension NSPasteboard.PasteboardType {
+    /// A recipe's adjustments as JSON, for Copy and Paste Settings.
+    static let granularAdjustments = NSPasteboard.PasteboardType("com.danielmccullum.Granular.adjustments")
 }
 
 /// Hands the model the main window's undo manager, so changes from anywhere —
 /// the inspector, the Recipe menu, Instant mode's canister — land on that
-/// window's Edit ▸ Undo.
+/// window's Edit ▸ Undo, and keeps Paste Settings current as the app returns
+/// to the front.
 private struct AdjustmentUndoConnection: ViewModifier {
     @Environment(\.undoManager) private var undoManager
     let model: AppModel
@@ -133,6 +177,9 @@ private struct AdjustmentUndoConnection: ViewModifier {
         content
             .onChange(of: undoManager, initial: true) { _, undoManager in
                 model.undoManager = undoManager
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                model.refreshSettingsOnPasteboard()
             }
     }
 }

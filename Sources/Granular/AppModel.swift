@@ -141,6 +141,9 @@ final class AppModel {
     /// The step a run of changes is joining, such as one slider drag.
     @ObservationIgnored var openUndoStep: OpenUndoStep?
     @ObservationIgnored var adjustmentChangeDepth = 0
+    /// Adjustments copied with Copy Settings, ready to paste.
+    var settingsOnPasteboard: FilmRecipe?
+    @ObservationIgnored var pasteboardChangeCount = -1
 
     // MARK: Viewer state
     // Keep each area's new stored state under its own mark.

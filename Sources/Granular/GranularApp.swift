@@ -37,6 +37,7 @@ struct GranularDesktopApp: App {
             ViewerCommands(model: model)
 
             FileCommands(model: model)
+            EditCommands(model: model)
             RecipeCommands(model: model)
         }
 
