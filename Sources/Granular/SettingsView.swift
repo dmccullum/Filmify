@@ -71,7 +71,7 @@ private struct GeneralSettings: View {
                         Text(visibility.title).tag(visibility)
                     }
                 }
-                Text("The menu bar item shows watching status and can pause or resume it.")
+                Text("The menu bar item shows watching status and recent files, and lets you pause watching or switch recipes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
