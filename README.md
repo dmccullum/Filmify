@@ -11,7 +11,7 @@ Granular is a native macOS app for giving still images a more photographic, film
 - **Instant mode** — a film-back interface: pick a recipe from the canister, drop images onto the film strip, and each one is processed and saved right away. An exposure counter tracks the frames you've shot.
 - **Edit mode** — open an image, fine-tune the look with a live preview, inspect details at any zoom level, hold the eye button to compare against the original, then export. Switch between Instant and Edit from the toolbar.
 - **Watched folders** — automatically process new images placed in a selected folder.
-- **Recipes** — start with a small set of built-in looks, then save, rename, update, and delete your own in the recipe manager.
+- **Recipes** — start with a small set of built-in looks, then save, rename, reorder, and share your own as `.granularrecipe` files in the Recipe Library (⌥⌘R).
 - **Film tone** — choose from curated color stocks and adjust exposure, contrast, saturation, vibrance, and warmth with a photographic response.
 - **Optical and finishing effects** — shape the frame with vignette, imperfect edge-focused lens blur and prismatic RGB separation, Black Pro-Mist-style diffusion, restrained halation, detail-preserving landscape glow, and signal-dependent grain.
 
