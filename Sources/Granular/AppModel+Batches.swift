@@ -8,6 +8,8 @@ struct ActiveBatch: Identifiable, Equatable {
     var progress: ProcessingBatch
     let recipeName: String?
     let isWatched: Bool
+    /// Ask Each Time: the images wait in a temporary folder for a Save panel.
+    var asksWhereToSave = false
     /// Drops made mid-batch run their own loop; the batch ends with the last one.
     var runs = 1
 }
@@ -33,7 +35,7 @@ extension AppModel {
         statusMessage = "Stopping after this image…"
     }
 
-    func beginBatch(of count: Int, isWatched: Bool) -> UUID {
+    func beginBatch(of count: Int, isWatched: Bool, asksWhereToSave: Bool = false) -> UUID {
         observeActivationIfNeeded()
         let batch: ActiveBatch
         if isWatched {
@@ -50,10 +52,16 @@ extension AppModel {
         } else if var running = instantBatch, !running.progress.isCancelled {
             running.progress.add(count)
             running.runs += 1
+            running.asksWhereToSave = running.asksWhereToSave || asksWhereToSave
             instantBatch = running
             batch = running
         } else {
-            batch = ActiveBatch(progress: ProcessingBatch(total: count), recipeName: batchRecipeName, isWatched: false)
+            batch = ActiveBatch(
+                progress: ProcessingBatch(total: count),
+                recipeName: batchRecipeName,
+                isWatched: false,
+                asksWhereToSave: asksWhereToSave
+            )
             instantBatch = batch
         }
         updateDockProgress()
@@ -108,11 +116,17 @@ extension AppModel {
             } else {
                 title = progress.isCancelled ? "Processing Cancelled" : "Processing Finished"
             }
+            // Frames waiting to be saved have nothing to reveal yet; clicking
+            // the notification brings Granular forward, and the Save panel with it.
+            let body = progress.summary(recipeName: finished.recipeName)
             ProcessingNotifier.shared.post(
                 title: title,
-                body: progress.summary(recipeName: finished.recipeName),
-                revealing: progress.outputs
+                body: finished.asksWhereToSave ? body + " · Open Granular to choose where to save" : body,
+                revealing: finished.asksWhereToSave ? [] : progress.outputs
             )
+        }
+        if finished.asksWhereToSave {
+            armSavePrompt()
         }
     }
 
@@ -157,6 +171,8 @@ extension AppModel {
                 guard let self else { return }
                 self.backgroundFinishedCount = 0
                 DockTile.setBadge(0)
+                // Images that finished while away are asked about now.
+                self.promptToSaveUnsaved()
             }
         }
     }

@@ -64,3 +64,14 @@ import Testing
     folders = RecentFolders.adding(c, to: folders, limit: 2)
     #expect(folders.map(\.lastPathComponent) == ["C", "A"])
 }
+
+@Test func saveDestinationKeepsAFreeNameAndNumbersATakenOne() {
+    let folder = URL(fileURLWithPath: "/tmp/out")
+    let free = SaveDestination.availableURL(for: "IMG_1 — Granular.jpg", in: folder, exists: { _ in false })
+    #expect(free.lastPathComponent == "IMG_1 — Granular.jpg")
+
+    let taken: Set<String> = ["IMG_1.jpg", "IMG_1 2.jpg"]
+    let url = SaveDestination.availableURL(for: "IMG_1.jpg", in: folder, exists: { taken.contains($0.lastPathComponent) })
+    #expect(url.lastPathComponent == "IMG_1 3.jpg")
+    #expect(url.deletingLastPathComponent().path == "/tmp/out")
+}

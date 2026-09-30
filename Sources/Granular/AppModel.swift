@@ -199,6 +199,18 @@ final class AppModel {
     /// Recent Instant output folders, most recent first; read on first use.
     var recentDropOutputFolders: [URL]?
     @ObservationIgnored var activationObserver: (any NSObjectProtocol)?
+    /// Whether Instant asks where each roll goes instead of writing to
+    /// `dropOutputFolder`, which stays remembered while this is on.
+    var asksWhereToSaveInstantly = UserDefaults.standard.bool(forKey: InstantOutputKey.asksEachTime) {
+        didSet { UserDefaults.standard.set(asksWhereToSaveInstantly, forKey: InstantOutputKey.asksEachTime) }
+    }
+    /// Frames developed into a temporary folder, waiting to be saved somewhere.
+    var unsavedJobIDs: Set<UUID> = []
+    /// The unsaved frames the next Save panel will ask about.
+    @ObservationIgnored var jobsAwaitingSavePrompt: [UUID] = []
+    @ObservationIgnored var isSavePromptArmed = false
+    @ObservationIgnored var isPresentingSavePanel = false
+    @ObservationIgnored var savePromptTask: Task<Void, Never>?
 
     // MARK: Recipe library state
     // Keep each area's new stored state under its own mark.
