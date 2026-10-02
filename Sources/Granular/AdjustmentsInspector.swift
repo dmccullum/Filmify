@@ -276,7 +276,8 @@ private struct LandscapeGlowCard: View {
     var body: some View {
         EffectCard(
             title: "Landscape Glow",
-            symbol: "mountain.2.circle",
+            symbol: "mountain.2",
+            symbolScale: 0.8,
             tint: .purple,
             enabled: $settings.isEnabled,
             reset: reset
@@ -311,6 +312,7 @@ private struct GrainCard: View {
         EffectCard(
             title: "Film Grain",
             symbol: "aqi.medium",
+            symbolScale: 0.85,
             tint: .mint,
             enabled: $settings.isEnabled,
             reset: reset
@@ -362,6 +364,8 @@ private struct EffectCard<Primary: View, Advanced: View>: View {
 
     let title: String
     let symbol: String
+    /// Shrinks a symbol that's drawn wider or denser than the rest.
+    var symbolScale: CGFloat = 1
     let tint: Color
     @Binding var enabled: Bool
     let reset: () -> Void
@@ -380,6 +384,7 @@ private struct EffectCard<Primary: View, Advanced: View>: View {
             HStack(spacing: 9) {
                 Image(systemName: symbol)
                     .foregroundStyle(tint)
+                    .scaleEffect(symbolScale)
                     .frame(width: 20)
                 Text(title)
                     .font(.headline)

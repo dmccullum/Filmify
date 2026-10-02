@@ -23,7 +23,7 @@ struct ToolTab: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: effect.symbol)
-                    .font(.system(size: 19, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 19 * effect.symbolScale, weight: isSelected ? .semibold : .regular))
                     .frame(height: 26)
                 // Marks a tool that's been changed from the recipe.
                 Circle()

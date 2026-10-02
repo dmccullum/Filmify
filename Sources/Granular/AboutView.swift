@@ -133,7 +133,7 @@ private struct PipelineDial: View {
         ("drop.halffull", "Lens Blur"),
         ("circle.dotted", "Diffusion"),
         ("sun.horizon", "Halation"),
-        ("mountain.2.circle", "Landscape Glow"),
+        ("mountain.2", "Landscape Glow"),
         ("aqi.medium", "Film Grain")
     ]
     private static let step = 360.0 / Double(stages.count)
@@ -162,7 +162,8 @@ private struct PipelineDial: View {
 
                 ForEach(Array(Self.stages.enumerated()), id: \.offset) { index, stage in
                     Image(systemName: stage.symbol)
-                        .font(.system(size: 13, weight: .semibold))
+                        // The mountains and grain are drawn wider and denser than the rest.
+                        .font(.system(size: 13 * (stage.symbol == "mountain.2" ? 0.8 : stage.symbol == "aqi.medium" ? 0.85 : 1), weight: .semibold))
                         .engraved()
                         .opacity(index == selectedIndex ? 1 : 0.72)
                         .offset(y: -(Self.diameter / 2 - 30))

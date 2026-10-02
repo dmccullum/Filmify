@@ -1,3 +1,4 @@
+import CoreGraphics
 import GranularCore
 
 /// The tools under the photo, in the order of the Mac's inspector. Film
@@ -38,8 +39,18 @@ enum EditEffect: String, CaseIterable, Identifiable {
         case .lensBlur: "drop.halffull"
         case .diffusion: "circle.dotted"
         case .halation: "sun.horizon"
-        case .glow: "mountain.2.circle"
+        case .glow: "mountain.2"
         case .grain: "aqi.medium"
+        }
+    }
+
+    /// Shrinks a symbol that's drawn wider or denser than the rest, so the
+    /// row reads evenly.
+    var symbolScale: CGFloat {
+        switch self {
+        case .glow: 0.8
+        case .grain: 0.85
+        default: 1
         }
     }
 
