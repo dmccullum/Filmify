@@ -893,8 +893,9 @@ private struct FilmRebate: View {
     }
 }
 
-/// A processed frame seen from the back of the film: mirrored, soft, and
-/// toned to the brown of a developed negative.
+/// A processed frame on the film: soft and toned to the brown of a developed
+/// negative. It stays the right way round rather than mirrored as from the
+/// back of the film, which would read as a mistake.
 private struct NegativeFrame: View {
     let image: CGImage?
 
@@ -930,7 +931,6 @@ private struct NegativeImage: View {
             .contrast(1.05)
             .blur(radius: 1.2)
             .opacity(0.88)
-            .scaleEffect(x: -1, y: 1)
             // Toning and blur are worked out once, so a frame that only rides
             // along on the film costs one texture instead of a chain of filters.
             .drawingGroup()
@@ -1409,7 +1409,7 @@ private struct GateButtonBody: View {
 }
 
 /// The shutter fires: a flash, the image passes through as a positive, then
-/// settles into the film as a toned, mirrored negative.
+/// settles into the film as a toned negative.
 private struct ExposureBurn: View {
     let image: CGImage?
     let isSpoiled: Bool
@@ -1431,7 +1431,6 @@ private struct ExposureBurn: View {
                     }
                     .clipped()
                     .brightness(0.3 * positive)
-                    .scaleEffect(x: -1, y: 1)
                     .opacity(positive)
             }
             if isSpoiled {

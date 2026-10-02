@@ -501,8 +501,8 @@ private struct FilmRebate: View {
 }
 
 /// A processed frame on the film: soft and toned to the brown of a developed
-/// negative. Unlike the Mac, it isn't mirrored; on the phone a flipped photo
-/// reads as a mistake rather than the back of the film.
+/// negative. It stays the right way round rather than mirrored as from the
+/// back of the film, which would read as a mistake.
 private struct NegativeFrame: View {
     let image: CGImage?
 
