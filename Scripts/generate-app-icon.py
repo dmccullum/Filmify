@@ -49,6 +49,7 @@ INSET = 12              # the label sits just inside the caps
 LIP_W = 58              # the velvet light-trap lip runs down the canister's right side
 PANEL_R, RED_W = 330, 80    # label: a yellow panel, a red stripe, then the black face (as in the app)
 FILM_T, FILM_R = 150, 952   # the film leader's top edge (mirrored at the bottom) and its right end
+SHIFT = 40              # everything slides this far left, for a little more room past the leader's end
 
 def rgb(h): h = h.lstrip("#"); return [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
 def hexs(c): return "#%02x%02x%02x" % tuple(round(max(0, min(1, v)) * 255) for v in c)
@@ -83,7 +84,8 @@ def cylinder(gid, dark, base, light, x0=0, x1=BODY_R, steps=48, spec_scale=1.0, 
 
 def svg(defs, body):
     return ('<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" '
-            'viewBox="0 0 1024 1024"><defs>%s</defs>%s</svg>\n' % (defs, body))
+            'viewBox="0 0 1024 1024"><defs>%s</defs><g transform="translate(%s,0)">%s</g></svg>\n'
+            % (defs, -SHIFT, body))
 
 # Palettes: colour, and a high-contrast monochrome set for Clear and Tinted.
 COLOR = {
