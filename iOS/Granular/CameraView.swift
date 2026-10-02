@@ -66,6 +66,14 @@ struct CameraView: View {
                 .allowsHitTesting(mode == .instant)
                 .accessibilityHidden(mode != .instant)
 
+            history
+                .padding(.top, switchCenterY - switchSize.height / 2)
+                .padding(.leading, 16 + (isEditingFullScreen ? statusBarInset : 0))
+                .ignoresSafeArea(edges: .top)
+                .opacity(mode == .edit ? 1 : 0)
+                .allowsHitTesting(mode == .edit)
+                .accessibilityHidden(mode != .edit)
+
             modeSwitch
                 // Laid out rather than offset, so it's touched where it's drawn.
                 .padding(.top, switchCenterY - switchSize.height / 2)
@@ -78,7 +86,7 @@ struct CameraView: View {
     private var modeSwitch: some View {
         Picker("Mode", selection: $mode.animation(.smooth(duration: 0.3))) {
             // Symbols, so the switch fits beside the Dynamic Island.
-            Image(systemName: "camera")
+            Image(systemName: "film.stack")
                 .accessibilityLabel("Instant")
                 .tag(CameraMode.instant)
             Image(systemName: "slider.horizontal.3")
@@ -88,6 +96,31 @@ struct CameraView: View {
         .pickerStyle(.segmented)
         .fixedSize()
         .onGeometryChange(for: CGSize.self) { $0.size } action: { switchSize = $0 }
+    }
+
+    /// Undo and Redo for the look, mirroring the mode switch across the
+    /// Dynamic Island.
+    private var history: some View {
+        HStack(spacing: 0) {
+            historyButton("Undo", systemImage: "arrow.uturn.backward", isAvailable: darkroom.canUndo, action: darkroom.undo)
+            historyButton("Redo", systemImage: "arrow.uturn.forward", isAvailable: darkroom.canRedo, action: darkroom.redo)
+        }
+        .glassEffect(.regular.interactive(), in: .capsule)
+    }
+
+    private func historyButton(_ title: String, systemImage: String, isAvailable: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(.smooth) { action() }
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(isAvailable ? .primary : .tertiary)
+                .frame(width: switchSize.width / 2, height: switchSize.height)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isAvailable)
+        .accessibilityLabel(title)
     }
 
     /// From the top of the screen: in the header beside the nameplate, or

@@ -6,7 +6,7 @@ struct EditView: View {
     @Environment(Darkroom.self) private var darkroom
     @Environment(Editor.self) private var editor
 
-    @State private var effect = EditEffect.tone
+    @State private var effect = EditEffect.film
     @State private var picked: PhotosPickerItem?
     @State private var canvas = CanvasGeometry()
     /// How much of the bottom the controls cover; the photo fits above them.
@@ -63,8 +63,7 @@ struct EditView: View {
         ZStack {
             PhotoCanvas(
                 image: editor.showsOriginal ? editor.original : editor.preview ?? editor.original,
-                // Room for the tallest panel, so the photo stays put as tools change.
-                insets: UIEdgeInsets(top: 4, left: 0, bottom: (controlsHeight + Self.tallestPanel - panelHeight(for: effect)).rounded() + 8, right: 0),
+                insets: UIEdgeInsets(top: 4, left: 0, bottom: controlsHeight.rounded() + 8, right: 0),
                 geometry: canvas,
                 onPressing: { editor.showsOriginal = $0 },
                 onDisplaySize: { editor.setDisplaySize(longEdge: $0) }
@@ -83,7 +82,8 @@ struct EditView: View {
                     recipeCenter: CGPoint(
                         x: darkroom.currentRecipe[keyPath: center.x],
                         y: darkroom.currentRecipe[keyPath: center.y]
-                    )
+                    ),
+                    onAdjusting: darkroom.setAdjusting
                 )
             }
 
@@ -130,18 +130,26 @@ struct EditView: View {
 
     private var controls: some View {
         VStack(spacing: 0) {
+            // Small capitals on a grey capsule, like the Camera app's labels.
             Text(isEnabled(effect) ? effect.title : "\(effect.title) · Off")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12, weight: .semibold))
+                .textCase(.uppercase)
+                .kerning(0.8)
+                .foregroundStyle(isEnabled(effect) ? .primary : .secondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Color(white: 0.2, opacity: 0.85), in: .capsule)
                 .contentTransition(.opacity)
-                .padding(.top, 18)
+                .padding(.top, 14)
 
             tools
                 .padding(.top, 2)
 
+            // As tall as the tool with the most sliders, so nothing scrolls
+            // and the tools stay put.
             EffectPanel(effect: effect)
-                .frame(height: panelHeight(for: effect))
-                .padding(.top, 6)
+                .frame(height: Self.panelHeight, alignment: .top)
+                .padding(.top, 4)
 
             EditBar(picked: $picked)
                 .padding(.top, 6)
@@ -225,12 +233,7 @@ struct EditView: View {
     private static let blurLeadIn: CGFloat = 20
     private static let blurFade: CGFloat = 84
 
-    /// Film Tone's stocks and its first two sliders; two sliders for the rest.
-    private static let tallestPanel: CGFloat = 160
-
-    private func panelHeight(for effect: EditEffect) -> CGFloat {
-        effect.hasStock ? Self.tallestPanel : 96
-    }
+    private static let panelHeight = CGFloat(EditEffect.mostParameters) * ParameterSlider.height
 
     private func isEnabled(_ effect: EditEffect) -> Bool {
         darkroom.recipe[keyPath: effect.isEnabled]
@@ -245,7 +248,7 @@ struct EditView: View {
 
 // MARK: - Effect panel
 
-/// The chosen effect's adjustments: Film Tone's stocks, then a line for each.
+/// The chosen tool's adjustments: Film's stocks, then a line for each.
 private struct EffectPanel: View {
     @Environment(Darkroom.self) private var darkroom
     @Environment(Editor.self) private var editor
@@ -253,38 +256,29 @@ private struct EffectPanel: View {
 
     var body: some View {
         @Bindable var darkroom = darkroom
-        ScrollView {
-            VStack(spacing: 0) {
-                if effect.hasStock {
-                    StockStrip(stock: stockBinding, thumbnails: editor.stockThumbnails)
-                        .padding(.horizontal, -20)
-                        .padding(.top, 2)
-                        .padding(.bottom, 6)
-                }
-                ForEach(effect.parameters) { parameter in
-                    ParameterSlider(
-                        parameter: parameter,
-                        value: $darkroom.recipe[dynamicMember: parameter.value],
-                        recipeValue: darkroom.currentRecipe[keyPath: parameter.value],
-                        onBegin: enable
-                    )
-                    .disabled(effect.hasStock && parameter.id == "Amount" && darkroom.recipe.tone.stock == .none)
-                }
+        VStack(spacing: 0) {
+            if effect.hasStock {
+                StockStrip(stock: stockBinding, thumbnails: editor.stockThumbnails)
+                    .padding(.horizontal, -20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 4)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, effect.hasStock ? 14 : 0)
+            ForEach(effect.parameters) { parameter in
+                ParameterSlider(
+                    parameter: parameter,
+                    value: $darkroom.recipe[dynamicMember: parameter.value],
+                    recipeValue: darkroom.currentRecipe[keyPath: parameter.value]
+                ) { editing in
+                    darkroom.setAdjusting(editing)
+                    if editing { enable() }
+                }
+                .disabled(effect.hasStock && parameter.id == "Amount" && darkroom.recipe.tone.stock == .none)
+                // The sliders dim while the effect's off; the stocks don't,
+                // since choosing one turns Film on.
+                .opacity(darkroom.recipe[keyPath: effect.isEnabled] ? 1 : 0.5)
+            }
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize)
-        .mask {
-            // Film Tone's list fades out where it carries on below.
-            LinearGradient(
-                stops: [.init(color: .black, location: 0.8), .init(color: .black.opacity(effect.hasStock ? 0 : 1), location: 1)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .opacity(darkroom.recipe[keyPath: effect.isEnabled] ? 1 : 0.5)
+        .padding(.horizontal, 20)
         .id(effect)
         .transition(.opacity)
     }

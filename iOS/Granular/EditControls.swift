@@ -28,9 +28,9 @@ struct ToolTab: View {
             .foregroundStyle(style)
             .frame(width: ToolTab.width, height: 44)
             // Reaches past the glyph, so the row is easy to hit end to end.
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 6)
             .contentShape(Rectangle())
-            .padding(.horizontal, -10)
+            .padding(.horizontal, -6)
         }
         .buttonStyle(.plain)
         .animation(.smooth(duration: 0.2), value: isSelected)
@@ -65,8 +65,10 @@ struct ParameterSlider: View {
     @Binding var value: Double
     /// The recipe's own value.
     let recipeValue: Double
-    /// Called as a drag begins, before the first change.
-    var onBegin: () -> Void = {}
+    /// Called as a drag begins, before the first change, and as it ends.
+    var onEditing: (Bool) -> Void = { _ in }
+
+    static let height: CGFloat = 44
 
     var body: some View {
         HStack(spacing: 12) {
@@ -80,9 +82,7 @@ struct ParameterSlider: View {
                 }
                 .accessibilityHidden(true)
 
-            Slider(value: $value, in: parameter.range) { isEditing in
-                if isEditing { onBegin() }
-            }
+            Slider(value: $value, in: parameter.range, onEditingChanged: onEditing)
             .accessibilityLabel(parameter.title)
             .accessibilityValue(parameter.display.accessibilityText(for: value))
             .accessibilityAction(named: "Reset to Recipe Value") { value = recipeValue }
@@ -96,7 +96,7 @@ struct ParameterSlider: View {
                 .accessibilityHidden(true)
         }
         .font(.subheadline)
-        .frame(height: 44)
+        .frame(height: Self.height)
         // A light tap as the slider passes the recipe's own value.
         .sensoryFeedback(trigger: value) { old, new in
             (old - recipeValue).sign != (new - recipeValue).sign || new == recipeValue ? .selection : nil
@@ -169,7 +169,7 @@ private struct StockTile: View {
                 }
                 .animation(.easeOut(duration: 0.2), value: thumbnail != nil)
 
-                Text(stock.name)
+                Text(stock.shortName)
                     .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .lineLimit(1)
@@ -181,5 +181,32 @@ private struct StockTile: View {
         .accessibilityLabel(stock.name)
         .accessibilityHint(stock.vibe)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+extension FilmStockID {
+    /// The name under a stock's thumbnail, short enough to fit it.
+    var shortName: String {
+        switch self {
+        case .none: "None"
+        case .portra400: "Portra"
+        case .ektar100: "Ektar"
+        case .gold200: "Gold"
+        case .pro400H: "Pro"
+        case .superia400: "Superia"
+        case .vision250D: "250D"
+        case .vision500T: "500T"
+        case .eterna500: "Eterna"
+        case .optima100: "Optima"
+        case .velvia100F: "Velvia"
+        case .eliteChrome: "Elite"
+        case .e100G: "E100G"
+        case .e200: "E200"
+        case .kodachrome64: "Chrome"
+        case .instax: "Instax"
+        case .fp100C: "FP100"
+        case .triX400: "Tri-X"
+        case .hp5: "HP5+"
+        }
     }
 }

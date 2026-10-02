@@ -222,6 +222,8 @@ struct CenterHandle: View {
     /// the renderer takes it.
     @Binding var center: CGPoint
     let recipeCenter: CGPoint
+    /// Called as a drag begins and ends.
+    var onAdjusting: (Bool) -> Void = { _ in }
 
     @State private var isDragging = false
 
@@ -238,13 +240,19 @@ struct CenterHandle: View {
                 .gesture(
                     DragGesture(minimumDistance: 0, coordinateSpace: .named(PhotoCanvas.space))
                         .onChanged { value in
-                            isDragging = true
+                            if !isDragging {
+                                isDragging = true
+                                onAdjusting(true)
+                            }
                             center = CGPoint(
                                 x: min(1, max(0, (value.location.x - frame.minX) / frame.width)),
                                 y: min(1, max(0, 1 - (value.location.y - frame.minY) / frame.height))
                             )
                         }
-                        .onEnded { _ in isDragging = false }
+                        .onEnded { _ in
+                            isDragging = false
+                            onAdjusting(false)
+                        }
                 )
                 .simultaneousGesture(TapGesture(count: 2).onEnded {
                     withAnimation(.smooth) { center = recipeCenter }

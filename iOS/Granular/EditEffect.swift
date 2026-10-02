@@ -1,9 +1,11 @@
 import GranularCore
 
-/// The seven effects on the dial row, in the order of the Mac's inspector,
-/// each with the adjustments the phone offers for it.
+/// The tools under the photo, in the order of the Mac's inspector. Film
+/// Tone is split three ways, so no tool needs more than three sliders.
 enum EditEffect: String, CaseIterable, Identifiable {
-    case tone
+    case film
+    case light
+    case color
     case vignette
     case lensBlur
     case diffusion
@@ -15,7 +17,9 @@ enum EditEffect: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .tone: "Film Tone"
+        case .film: "Film"
+        case .light: "Light"
+        case .color: "Color"
         case .vignette: "Vignette"
         case .lensBlur: "Lens Blur"
         case .diffusion: "Diffusion"
@@ -25,22 +29,11 @@ enum EditEffect: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The name under the dial, short enough for seven across.
-    var shortTitle: String {
-        switch self {
-        case .tone: "Tone"
-        case .vignette: "Vignette"
-        case .lensBlur: "Blur"
-        case .diffusion: "Diffusion"
-        case .halation: "Halation"
-        case .glow: "Glow"
-        case .grain: "Grain"
-        }
-    }
-
     var symbol: String {
         switch self {
-        case .tone: "film"
+        case .film: "film"
+        case .light: "circle.lefthalf.filled"
+        case .color: "paintpalette"
         case .vignette: "camera.aperture"
         case .lensBlur: "drop.halffull"
         case .diffusion: "circle.dotted"
@@ -50,9 +43,10 @@ enum EditEffect: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Film, Light and Color are all Film Tone, so they're on or off together.
     var isEnabled: WritableKeyPath<FilmRecipe, Bool> {
         switch self {
-        case .tone: \.tone.isEnabled
+        case .film, .light, .color: \.tone.isEnabled
         case .vignette: \.lightShaping.isEnabled
         case .lensBlur: \.lensBlur.isEnabled
         case .diffusion: \.diffusion.isEnabled
@@ -62,17 +56,21 @@ enum EditEffect: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Film Tone leads with its stock, chosen from a strip of thumbnails
-    /// rather than dialled in.
-    var hasStock: Bool { self == .tone }
+    /// Film leads with its stock, chosen from a strip of thumbnails rather
+    /// than dialled in.
+    var hasStock: Bool { self == .film }
 
     var parameters: [EffectParameter] {
         switch self {
-        case .tone:
+        case .film:
+            [EffectParameter("Amount", \.tone.stockAmount, 0 ... FilmToneSettings.maximumStockAmount, display: .strength)]
+        case .light:
             [
-                EffectParameter("Amount", \.tone.stockAmount, 0 ... FilmToneSettings.maximumStockAmount, display: .strength),
                 EffectParameter("Exposure", \.tone.exposure, -2 ... 2, display: .exposure),
-                EffectParameter("Contrast", \.tone.contrast, -1 ... 1),
+                EffectParameter("Contrast", \.tone.contrast, -1 ... 1)
+            ]
+        case .color:
+            [
                 EffectParameter("Saturation", \.tone.saturation, -1 ... 1),
                 EffectParameter("Vibrance", \.tone.vibrance, -1 ... 1),
                 EffectParameter("Warmth", \.tone.warmth, -1 ... 1)
@@ -110,20 +108,20 @@ enum EditEffect: String, CaseIterable, Identifiable {
         }
     }
 
-    /// How much of the effect is dialled in, from 0 to 1, for the dial's ring.
-    func strength(in recipe: FilmRecipe) -> Double {
-        if self == .tone, recipe.tone.stock == .none {
-            return recipe.tone.hasToneAdjustments ? 0.5 : 0
-        }
-        guard let amount = parameters.first else { return 0 }
-        let value = recipe[keyPath: amount.value]
-        return min(1, max(0, (value - amount.range.lowerBound) / (amount.range.upperBound - amount.range.lowerBound)))
-    }
+    /// The most sliders any tool has, which sets the panel's height.
+    static let mostParameters = allCases.map(\.parameters.count).max() ?? 0
 
-    /// Puts the effect back as the recipe has it.
+    /// Puts the tool's part of the look back as the recipe has it.
     func reset(_ recipe: inout FilmRecipe, to original: FilmRecipe) {
         switch self {
-        case .tone: recipe.tone = original.tone
+        case .film:
+            recipe.tone.isEnabled = original.tone.isEnabled
+            recipe.tone.stock = original.tone.stock
+            recipe.tone.stockAmount = original.tone.stockAmount
+        case .light, .color:
+            for parameter in parameters {
+                recipe[keyPath: parameter.value] = original[keyPath: parameter.value]
+            }
         case .vignette: recipe.lightShaping = original.lightShaping
         case .lensBlur: recipe.lensBlur = original.lensBlur
         case .diffusion: recipe.diffusion = original.diffusion

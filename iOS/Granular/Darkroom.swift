@@ -37,7 +37,10 @@ final class Darkroom {
     /// The look loaded in the camera: a recipe as chosen, or as adjusted in
     /// Edit mode. Instant and Edit share it, as they do on the Mac.
     var recipe: FilmRecipe {
-        didSet { scheduleRecipeSave() }
+        didSet {
+            scheduleRecipeSave()
+            recordChange(from: oldValue)
+        }
     }
 
     /// The recipe the look started from, which Revert goes back to.
@@ -68,6 +71,19 @@ final class Darkroom {
     private let roll: URL
 
     @ObservationIgnored private var recipeSaveTask: Task<Void, Never>?
+
+    /// Earlier looks, newest last, for Undo and Redo.
+    private var undoStack: [FilmRecipe] = []
+    private var redoStack: [FilmRecipe] = []
+    @ObservationIgnored private var isRestoring = false
+    @ObservationIgnored private var isAdjusting = false
+    /// Changes made together undo together: those in one action, like a
+    /// stock that also turns Film on, and all of a slider's drag.
+    @ObservationIgnored private var isGrouping = false
+    @ObservationIgnored private var groupEnd: Task<Void, Never>?
+
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
 
     private enum Keys {
         /// Earlier builds kept only the chosen built-in, by ID.
@@ -119,6 +135,72 @@ final class Darkroom {
         recipe = currentRecipe
         persistRecipe()
     }
+
+    // MARK: Undo
+
+    func undo() {
+        guard let previous = undoStack.popLast() else { return }
+        endGroup()
+        redoStack.append(recipe)
+        restore(previous)
+    }
+
+    func redo() {
+        guard let next = redoStack.popLast() else { return }
+        endGroup()
+        undoStack.append(recipe)
+        restore(next)
+    }
+
+    /// Holds a control's changes together from touch down to touch up,
+    /// however long it pauses along the way.
+    func setAdjusting(_ adjusting: Bool) {
+        isAdjusting = adjusting
+        if !adjusting, isGrouping { scheduleGroupEnd() }
+    }
+
+    /// A look carries the identity of the recipe it came from, so putting one
+    /// back puts back the choice of recipe too.
+    private func restore(_ look: FilmRecipe) {
+        isRestoring = true
+        defer { isRestoring = false }
+        if availableRecipes.contains(where: { $0.id == look.id }) {
+            selectedRecipeID = look.id
+        }
+        recipe = look
+        persistRecipe()
+    }
+
+    private func recordChange(from old: FilmRecipe) {
+        guard !isRestoring, old != recipe else { return }
+        if !isGrouping {
+            isGrouping = true
+            undoStack.append(old)
+            if undoStack.count > Self.undoLimit { undoStack.removeFirst() }
+            redoStack.removeAll()
+        }
+        scheduleGroupEnd()
+    }
+
+    /// Ends the group once the current action has finished, unless a
+    /// control is still held.
+    private func scheduleGroupEnd() {
+        groupEnd?.cancel()
+        guard !isAdjusting else { return }
+        groupEnd = Task { [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            self?.isGrouping = false
+        }
+    }
+
+    private func endGroup() {
+        groupEnd?.cancel()
+        groupEnd = nil
+        isGrouping = false
+    }
+
+    private static let undoLimit = 100
 
     func persistRecipe() {
         recipeSaveTask?.cancel()
