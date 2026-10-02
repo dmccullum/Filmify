@@ -3,8 +3,8 @@ import SwiftUI
 
 // MARK: - Tools
 
-/// One effect in the tool bar under the photo: its symbol and name, lit when
-/// chosen and dimmed while the effect is off.
+/// One effect in the tool bar under the photo: its symbol, white when
+/// chosen, grey otherwise, and faint while the effect is off.
 struct ToolTab: View {
     let effect: EditEffect
     let isSelected: Bool
@@ -14,21 +14,17 @@ struct ToolTab: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 5) {
+            VStack(spacing: 4) {
                 Image(systemName: effect.symbol)
                     .font(.system(size: 19, weight: isSelected ? .semibold : .regular))
-                    .frame(height: 24)
-                Text(effect.shortTitle)
-                    .font(.caption2.weight(isSelected ? .semibold : .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .frame(height: 26)
                 // Marks a tool that's been changed from the recipe.
                 Circle()
                     .frame(width: 4, height: 4)
                     .opacity(isModified ? 1 : 0)
             }
-            .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-            .frame(maxWidth: .infinity, minHeight: 56)
+            .foregroundStyle(style)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -39,12 +35,21 @@ struct ToolTab: View {
         .accessibilityValue(isEnabled ? (isModified ? "On, edited" : "On") : "Off")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
+
+    private var style: Color {
+        switch (isSelected, isEnabled) {
+        case (true, true): .white
+        case (true, false): .white.opacity(0.45)
+        case (false, true): .white.opacity(0.55)
+        case (false, false): .white.opacity(0.22)
+        }
+    }
 }
 
 // MARK: - Sliders
 
-/// One adjustment: its name and value over a slider. Double-tapping the name
-/// puts back the recipe's own value.
+/// One adjustment on a single line: its name, a slider and its value.
+/// Double-tapping the name puts back the recipe's own value.
 struct ParameterSlider: View {
     let parameter: EffectParameter
     @Binding var value: Double
@@ -54,22 +59,16 @@ struct ParameterSlider: View {
     var onBegin: () -> Void = {}
 
     var body: some View {
-        VStack(spacing: 2) {
-            HStack {
-                Text(parameter.title)
-                Spacer()
-                Text(parameter.display.text(for: value))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText(value: value))
-                    .animation(.snappy(duration: 0.15), value: value)
-            }
-            .font(.subheadline)
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) {
-                withAnimation(.smooth) { value = recipeValue }
-            }
-            .accessibilityHidden(true)
+        HStack(spacing: 12) {
+            Text(parameter.title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 76, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    withAnimation(.smooth) { value = recipeValue }
+                }
+                .accessibilityHidden(true)
 
             Slider(value: $value, in: parameter.range) { isEditing in
                 if isEditing { onBegin() }
@@ -77,7 +76,17 @@ struct ParameterSlider: View {
             .accessibilityLabel(parameter.title)
             .accessibilityValue(parameter.display.accessibilityText(for: value))
             .accessibilityAction(named: "Reset to Recipe Value") { value = recipeValue }
+
+            Text(parameter.display.text(for: value))
+                .monospacedDigit()
+                .foregroundStyle(value == recipeValue ? .secondary : .primary)
+                .frame(width: 50, alignment: .trailing)
+                .contentTransition(.numericText(value: value))
+                .animation(.snappy(duration: 0.15), value: value)
+                .accessibilityHidden(true)
         }
+        .font(.footnote)
+        .frame(height: 34)
         // A light tap as the slider passes the recipe's own value.
         .sensoryFeedback(trigger: value) { old, new in
             (old - recipeValue).sign != (new - recipeValue).sign || new == recipeValue ? .selection : nil
@@ -129,7 +138,7 @@ private struct StockTile: View {
 
     var body: some View {
         Button(action: select) {
-            VStack(spacing: 5) {
+            VStack(spacing: 3) {
                 ZStack {
                     Rectangle().fill(.quaternary)
                     if let thumbnail {
@@ -139,20 +148,20 @@ private struct StockTile: View {
                             .transition(.opacity)
                     }
                 }
-                .frame(width: 54, height: 54)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(.tint, lineWidth: 2.5)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(.white, lineWidth: 2)
                         .opacity(isSelected ? 1 : 0)
                 }
                 .animation(.easeOut(duration: 0.2), value: thumbnail != nil)
 
                 Text(stock.name)
-                    .font(.caption2.weight(isSelected ? .semibold : .regular))
+                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .lineLimit(1)
-                    .frame(width: 64)
+                    .frame(width: 52)
             }
             .contentShape(Rectangle())
         }
