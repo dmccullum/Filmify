@@ -150,15 +150,31 @@ struct EditView: View {
             // The photo carries on under the controls, softly blurred, as in Photos.
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
-                LinearGradient(colors: [.black.opacity(0.25), .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
             }
             .mask {
-                LinearGradient(
-                    stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.14)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                // Eased over a long run, so there's no line where the blur begins.
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black.opacity(0.04), location: 0.15),
+                            .init(color: .black.opacity(0.15), location: 0.3),
+                            .init(color: .black.opacity(0.35), location: 0.45),
+                            .init(color: .black.opacity(0.6), location: 0.6),
+                            .init(color: .black.opacity(0.82), location: 0.75),
+                            .init(color: .black.opacity(0.96), location: 0.9),
+                            .init(color: .black, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: Self.blurFade)
+                    Rectangle()
+                }
             }
+            // Begins a little above the controls, over the photo.
+            .padding(.top, -Self.blurLeadIn)
             .ignoresSafeArea(edges: .bottom)
             .allowsHitTesting(false)
         }
@@ -203,6 +219,11 @@ struct EditView: View {
         .padding(.horizontal, 20)
         .sensoryFeedback(.impact(weight: .light), trigger: darkroom.recipe[keyPath: effect.isEnabled])
     }
+
+    /// How far above the controls their blur starts to fade in, and over
+    /// how long it does.
+    private static let blurLeadIn: CGFloat = 20
+    private static let blurFade: CGFloat = 84
 
     /// Film Tone's stocks and its first two sliders; two sliders for the rest.
     private static let tallestPanel: CGFloat = 160

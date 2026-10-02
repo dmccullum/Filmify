@@ -3,8 +3,8 @@ import SwiftUI
 
 // MARK: - Tools
 
-/// One effect in the tool bar under the photo: its symbol, white when
-/// chosen, grey otherwise, and faint while the effect is off.
+/// One effect in the tool bar under the photo: yellow while it's the one
+/// being adjusted, white while it's on, and faint while it's off.
 struct ToolTab: View {
     static let width: CGFloat = 28
 
@@ -43,12 +43,17 @@ struct ToolTab: View {
 
     private var style: Color {
         switch (isSelected, isEnabled) {
-        case (true, true): .white
-        case (true, false): .white.opacity(0.45)
-        case (false, true): .white.opacity(0.55)
-        case (false, false): .white.opacity(0.22)
+        case (true, true): .editSelection
+        case (true, false): .editSelection.opacity(0.5)
+        case (false, true): .white
+        case (false, false): .white.opacity(0.3)
         }
     }
+}
+
+extension Color {
+    /// The one color in Edit, as in Photos: the tool being adjusted.
+    static let editSelection = Color(.systemYellow)
 }
 
 // MARK: - Sliders

@@ -39,6 +39,7 @@ final class PhotoScrollView: UIScrollView, UIScrollViewDelegate {
     private let imageView = UIImageView()
     private var imageAspect: CGFloat?
     private var fittedBounds: CGRect = .zero
+    private var fittedArea: CGRect = .zero
     var geometry: CanvasGeometry?
     var onPressing: (Bool) -> Void = { _ in }
     var onDisplaySize: (CGFloat) -> Void = { _ in }
@@ -91,6 +92,19 @@ final class PhotoScrollView: UIScrollView, UIScrollViewDelegate {
         if bounds.size != fittedBounds.size { refit() }
     }
 
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        if !fitArea.isClose(to: fittedArea) { refit() }
+    }
+
+    /// Where the photo rests: inside the insets, measured up from the home
+    /// indicator, which the canvas reaches under.
+    private var fitArea: CGRect {
+        var insets = fitInsets
+        insets.bottom += safeAreaInsets.bottom
+        return CGRect(origin: .zero, size: bounds.size).inset(by: insets)
+    }
+
     /// Fits the photo into the space left by the controls, at no zoom.
     private func refit() {
         guard let imageAspect, bounds.width > 0, bounds.height > 0 else {
@@ -98,7 +112,8 @@ final class PhotoScrollView: UIScrollView, UIScrollViewDelegate {
             return
         }
         fittedBounds = bounds
-        let area = bounds.inset(by: fitInsets)
+        let area = fitArea
+        fittedArea = area
         var size = CGSize(width: area.width, height: area.width / imageAspect)
         if size.height > area.height {
             size = CGSize(width: area.height * imageAspect, height: area.height)
@@ -114,14 +129,14 @@ final class PhotoScrollView: UIScrollView, UIScrollViewDelegate {
 
     /// Keeps a photo smaller than the space centred in it.
     private func centerContent() {
-        let area = bounds.inset(by: fitInsets)
+        let area = fitArea
         let horizontal = max(0, (area.width - contentSize.width) / 2)
         let vertical = max(0, (area.height - contentSize.height) / 2)
         contentInset = UIEdgeInsets(
-            top: fitInsets.top + vertical,
-            left: fitInsets.left + horizontal,
-            bottom: fitInsets.bottom + vertical,
-            right: fitInsets.right + horizontal
+            top: area.minY + vertical,
+            left: area.minX + horizontal,
+            bottom: bounds.height - area.maxY + vertical,
+            right: bounds.width - area.maxX + horizontal
         )
     }
 
@@ -181,6 +196,13 @@ private extension UIEdgeInsets {
     func isClose(to other: UIEdgeInsets) -> Bool {
         abs(top - other.top) < 1 && abs(left - other.left) < 1
             && abs(bottom - other.bottom) < 1 && abs(right - other.right) < 1
+    }
+}
+
+private extension CGRect {
+    func isClose(to other: CGRect) -> Bool {
+        abs(minX - other.minX) < 1 && abs(minY - other.minY) < 1
+            && abs(width - other.width) < 1 && abs(height - other.height) < 1
     }
 }
 
