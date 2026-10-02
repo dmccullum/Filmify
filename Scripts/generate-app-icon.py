@@ -67,12 +67,13 @@ def lighting(x):
     bounce = max(0.0, nx) ** 5 * 0.18
     return diffuse, spec, bounce
 
-def cylinder(gid, dark, base, light, x0=0, x1=BODY_R, steps=48, spec_scale=1.0):
+def cylinder(gid, dark, base, light, x0=0, x1=BODY_R, steps=48, spec_scale=1.0, spec_shift=0.0):
     d, b, l = rgb(dark), rgb(base), rgb(light)
     stops = ""
     for i in range(steps + 1):
         x = i / steps
-        diffuse, spec, bounce = lighting(x)
+        diffuse, _, bounce = lighting(x)
+        spec = lighting(x + spec_shift)[1]      # spec_shift slides the highlight left
         c = mix(d, b, smooth(diffuse / 0.82)) if diffuse < 0.82 else mix(b, l, smooth((diffuse - 0.82) / 0.18))
         c = mix(c, b, bounce)
         c = mix(c, [1, 1, 1], spec * 0.22 * spec_scale)
@@ -88,17 +89,27 @@ def svg(defs, body):
 COLOR = {
     "yellow": ("#7A3400", "#F3B80C", "#F7CB2C"), "red": ("#5A0E02", "#EE4A1A", "#FF8C62"),
     "black": ("#000000", "#1D1D20", "#55575E"), "cap": ("#0E0E10", "#5A5C63"),
-    "film": ("#E8893A", "#C9631F", "#A04A14", "#6E300B"), "lip": "#0c0a09", "lipline": "#2d2622",
+    "film": ("#E8893A", "#C9631F", "#A04A14", "#6E300B"), "lip": "#0c0a09", "edge": 0.0, "rim": 0.10,
+    "spec_shift": 0.12,     # the wide panel's highlight sits mid-panel, not beside the red stripe
 }
-# Dark mode draws its own near-black backdrop (the fill below is ignored there), so the
-# black face, lip and caps are lifted to charcoal and steel to stand clear of it.
-DARK = dict(COLOR, black=("#141417", "#3A3C42", "#80838B"), cap=("#2A2B30", "#B4B7BE"),
-            lip="#2B2725", lipline="#4D4540")
-# Four clear values: bright canister, mid film, black face and lip, dark cap.
+# Dark mode draws its own near-black backdrop (the fill below is ignored there). The label
+# stays as in light mode, so the black panel and lip meet the backdrop: a brighter rim
+# light and a lit rolled edge on the lip keep the canister's right side clear of it. The
+# caps turn to chrome, like an old Kodak tin: banded reflections of a bright sky and a
+# dark horizon rather than a soft cylinder. The sky's peak is drawn at 0.28 and slid to
+# sit exactly over the label's highlight.
+DARK = dict(COLOR, lip="#3A3532", edge=0.38, rim=0.22,
+            chrome=((0, "#2A2C31"), (0.17, "#4A4E56"), (0.23, "#C9CDD3"), (0.28, "#FFFFFF"),
+                    (0.34, "#C3C8CF"), (0.43, "#5E636C"), (0.50, "#2A2C31"), (0.60, "#4E525A"),
+                    (0.72, "#80858D"), (0.82, "#8F949B"), (0.93, "#62666E"), (1, "#3E4148")))
+# Clear and Tinted read only brightness against a dark backdrop, so the canister is one
+# bright shape (its black panel lifted to match), the red stripe its single dark band, the
+# lip a black gap, and the leader a second bright shape. Tinted Dark compresses everything
+# below white toward the backdrop, so both shapes stay close to white.
 MONO = {
-    "yellow": ("#5C5C5C", "#EDEDED", "#FFFFFF"), "red": ("#2A2A2A", "#5E5E5E", "#8A8A8A"),
-    "black": ("#000000", "#0A0A0A", "#3A3A3A"), "cap": ("#030303", "#9A9A9A"),
-    "film": ("#A2A2A2", "#929292", "#828282", "#727272"), "lip": "#000000", "lipline": "#141414",
+    "yellow": ("#8A8A8A", "#F4F4F4", "#FFFFFF"), "red": ("#141414", "#2E2E2E", "#484848"),
+    "black": ("#9A9A9A", "#EAEAEA", "#F4F4F4"), "cap": ("#3A3A3A", "#C4C4C4"),
+    "film": ("#FFFFFF", "#F6F6F6", "#ECECEC", "#E0E0E0"), "lip": "#000000", "edge": 0.0, "rim": 0.10,
 }
 
 def outline(right):
@@ -107,41 +118,66 @@ def outline(right):
 
 def body_svg(P):
     defs = ('<clipPath id="b"><path d="%s"/></clipPath>' % outline(BODY_R - INSET)
-            + "".join(cylinder(k, *P[k]) for k in ("yellow", "red", "black")))
+            + "".join(cylinder(k, *P[k], spec_shift=P.get("spec_shift", 0.0)) for k in ("yellow", "red", "black")))
     parts = [(-80, PANEL_R + 80, "yellow"), (PANEL_R, RED_W, "red"), (PANEL_R + RED_W, BODY_R, "black")]
     label = "".join('<rect x="%s" y="-80" width="%s" height="1200" fill="url(#%s)"/>' % (x, w, g) for x, w, g in parts)
     x, w = BODY_R - INSET - LIP_W, LIP_W + INSET
-    lines = "".join('<rect x="%s" y="%s" width="%s" height="3" fill="%s"/>' % (x, y, w, P["lipline"]) for y in range(0, 1024, 9))
-    lip = ('<rect x="%s" y="-80" width="%s" height="1200" fill="%s"/>%s'
-           '<rect x="%s" y="-80" width="%s" height="1200" fill="url(#ls)"/>' % (x, w, P["lip"], lines, x, w))
+    # The velvet light trap is matte, sunk in shadow at both sides, with the tin folded
+    # over it catching the light on its left and its rolled edge on its right.
+    lip = ('<rect x="%s" y="-80" width="%s" height="1200" fill="%s"/>'
+           '<rect x="%s" y="-80" width="%s" height="1200" fill="url(#ls)"/>'
+           '<rect x="%s" y="-80" width="3" height="1200" fill="#fff" fill-opacity="0.18"/>'
+           '<rect x="%s" y="-80" width="5" height="1200" fill="#fff" fill-opacity="%s"/>'
+           % (x, w, P["lip"], x, w, x, x + w - 5, P["edge"]))
+    # A rim light down the canister's shaded side, so it reads round rather than flat.
+    rim = '<rect x="%s" y="-80" width="44" height="1200" fill="url(#rim)"/>' % (x - 44)
     # The top cap stands proud of the label and shades it.
     shade = '<rect x="-80" y="%s" width="%s" height="42" fill="url(#sh)"/>' % (CAP_H - 2, BODY_R + 80)
     defs += ('<linearGradient id="ls" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="%s" y2="0">'
-             '<stop offset="0" stop-color="#fff" stop-opacity="0.12"/><stop offset="1" stop-color="#000" stop-opacity="0.6"/></linearGradient>'
+             '<stop offset="0" stop-color="#000" stop-opacity="0.35"/><stop offset="0.25" stop-color="#fff" stop-opacity="0.06"/>'
+             '<stop offset="1" stop-color="#000" stop-opacity="0.7"/></linearGradient>'
+             '<linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="%s" y2="0">'
+             '<stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.8" stop-color="#fff" stop-opacity="%s"/>'
+             '<stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>'
              '<linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.45"/>'
-             '<stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>' % (x, x + LIP_W))
-    return svg(defs, '<g clip-path="url(#b)">%s%s%s</g>' % (label, lip, shade))
+             '<stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>' % (x, x + LIP_W, x - 44, x, P["rim"]))
+    return svg(defs, '<g clip-path="url(#b)">%s%s%s%s</g>' % (label, rim, lip, shade))
+
+def highlight_x(shift):
+    """Where the label's specular peaks, from 0 to 1 across the canister."""
+    return max((i / 1000 for i in range(1001)), key=lambda x: lighting(x + shift)[1])
 
 def cap_svg(P):
-    """Thin, smooth, glossy caps, standing just proud of the body, with a lit rim on each."""
+    """Thin, smooth, glossy caps, standing just proud of the body, with a lit rim on each.
+    Painted caps darken toward the top cap's lower edge; chrome caps mirror the same
+    sky top and bottom, so they don't."""
     c = P["cap"]
-    defs = ('<clipPath id="o"><path d="%s"/></clipPath>' % outline(BODY_R)
-            + cylinder("m", c[0], hexs(mix(rgb(c[0]), rgb(c[1]), 0.45)), c[1]) +
+    if "chrome" in P:
+        dx = highlight_x(P.get("spec_shift", 0.0)) - 0.28
+        stops = "".join('<stop offset="%.4f" stop-color="%s"/>' % (o if o in (0, 1) else o + dx, s) for o, s in P["chrome"])
+        metal = ('<linearGradient id="m" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="%s" y2="0">%s</linearGradient>'
+                 % (BODY_R, stops))
+    else:
+        metal = cylinder("m", c[0], hexs(mix(rgb(c[0]), rgb(c[1]), 0.45)), c[1], spec_shift=P.get("spec_shift", 0.0))
+    defs = ('<clipPath id="o"><path d="%s"/></clipPath>' % outline(BODY_R) + metal +
             '<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.10"/>'
             '<stop offset="1" stop-color="#000" stop-opacity="0.35"/></linearGradient>')
     top, bottom = 1024 - CAP_H, 1104
     body = ('<g clip-path="url(#o)">'
             '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#m)"/>'
-            '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#v)"/>'
+            '%s'
             '<rect x="-80" y="%s" width="%s" height="%s" fill="url(#m)"/>'
             '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.22"/>'
             '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.14"/></g>'
-            % (BODY_R + 80, CAP_H + 80, BODY_R + 80, CAP_H + 80, top, BODY_R + 80, bottom - top,
+            % (BODY_R + 80, CAP_H + 80,
+               "" if "chrome" in P else '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#v)"/>' % (BODY_R + 80, CAP_H + 80),
+               top, BODY_R + 80, bottom - top,
                CAP_H - 5, BODY_R + 80, top + 1, BODY_R + 80))
     return svg(defs, body)
 
 def film_svg(P):
-    """The leader, as tall as the label, cut to half height at its end."""
+    """The leader, as tall as the label, cut to half height at its end. It's thin, so it
+    draws its own crisp lit edge rather than taking Liquid Glass's bevel."""
     x0 = BODY_R - INSET - LIP_W - 10
     t, b = FILM_T, 1024 - FILM_T
     tongue_b = t + (b - t) * 0.5
@@ -161,10 +197,13 @@ def film_svg(P):
     defs = ('<linearGradient id="f" gradientUnits="userSpaceOnUse" x1="0" y1="%s" x2="0" y2="%s">'
             '<stop offset="0" stop-color="%s"/><stop offset="0.15" stop-color="%s"/>'
             '<stop offset="0.6" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>' % ((t, b) + f) +
+            # The slot's shadow on the film just where it leaves the canister, and a warm sheen further out.
             '<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="1000" y2="0">'
-            '<stop offset="0" stop-color="#000" stop-opacity="0.6"/><stop offset="0.2" stop-color="#000" stop-opacity="0"/>'
-            '<stop offset="0.6" stop-color="#FFD2A8" stop-opacity="0.18"/><stop offset="0.8" stop-color="#FFD2A8" stop-opacity="0"/></linearGradient>' % x0)
-    return svg(defs, '<path fill="url(#f)" fill-rule="evenodd" d="%s"/><path fill="url(#g)" fill-rule="evenodd" d="%s"/>' % (d, d))
+            '<stop offset="0" stop-color="#000" stop-opacity="0.65"/><stop offset="0.07" stop-color="#000" stop-opacity="0"/>'
+            '<stop offset="0.53" stop-color="#FFD2A8" stop-opacity="0.18"/><stop offset="0.76" stop-color="#FFD2A8" stop-opacity="0"/></linearGradient>'
+            '<clipPath id="c"><path fill-rule="evenodd" d="%s"/></clipPath>' % (BODY_R - 6, d))
+    edge = '<rect clip-path="url(#c)" x="%s" y="%s" width="%s" height="2.5" fill="#FFE2C4" fill-opacity="0.55"/>' % (x0, t, xe - x0)
+    return svg(defs, '<path fill="url(#f)" fill-rule="evenodd" d="%s"/><path fill="url(#g)" fill-rule="evenodd" d="%s"/>%s' % (d, d, edge))
 
 def layer(name, dark=False):
     # No plain "image-name": when it's present, Icon Composer ignores the specializations.
@@ -173,8 +212,8 @@ def layer(name, dark=False):
         specs.append({"appearance": "dark", "value": name + "-dark.svg"})
     specs.append({"appearance": "tinted", "value": name + "-mono.svg"})
     return {"name": name, "image-name-specializations": specs}
-def group(name, layers, translucency=0.0, shadow="neutral"):
-    return {"name": name, "layers": layers, "shadow": {"kind": shadow, "opacity": 0.5}, "specular": True,
+def group(name, layers, translucency=0.0, shadow="neutral", specular=True):
+    return {"name": name, "layers": layers, "shadow": {"kind": shadow, "opacity": 0.5}, "specular": specular,
             "translucency": {"enabled": translucency > 0, "value": translucency}}
 
 shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT + "/Assets")
@@ -191,7 +230,7 @@ doc = {
     "fill-specializations": [{"value": aluminum}, {"appearance": "dark", "value": magnesium}],
     "groups": [
         group("Canister", [layer("cap", dark=True), layer("body", dark=True)]),
-        group("Film", [layer("film")], translucency=0.1, shadow="layer-color"),
+        group("Film", [layer("film")], translucency=0.1, shadow="layer-color", specular=False),
     ],
     "supported-platforms": {"circles": ["watchOS"], "squares": "shared"},
 }

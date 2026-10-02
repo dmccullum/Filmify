@@ -16,7 +16,7 @@ export default function Home() {
     <main className="journal">
       <ParallaxMotion />
       <nav className="masthead">
-        <a className="journal-mark" href="#top" aria-label="Granular home"><img src={asset("/app-icon-dark.png?v=5")} alt="" /> GRANULAR</a>
+        <a className="journal-mark" href="#top" aria-label="Granular home"><img src={asset("/app-icon-dark.png?v=6")} alt="" /> GRANULAR</a>
         <a href="https://github.com/dmccullum/Granular">GITHUB ↗</a>
       </nav>
 
@@ -62,7 +62,7 @@ export default function Home() {
       </section>
 
       <section className="last-frame">
-        <img src={asset("/app-icon-dark.png?v=5")} alt="Granular app icon" />
+        <img src={asset("/app-icon-dark.png?v=6")} alt="Granular app icon" />
         <h2>Made with love<br />by <a href="https://danielm.cc">Daniel McCullum</a></h2>
         <a className="stamp stamp-red" href="https://github.com/dmccullum/Granular">VIEW ON GITHUB ↗</a>
       </section>

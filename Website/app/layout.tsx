@@ -9,18 +9,18 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Granular — A photographic finish for still images",
     description: "A native Mac app for film tone, diffusion, halation, and light-responsive grain.",
-    images: [{ url: asset("/app-icon-dark.png?v=5"), width: 1024, height: 1024, alt: "Granular app icon" }],
+    images: [{ url: asset("/app-icon-dark.png?v=6"), width: 1024, height: 1024, alt: "Granular app icon" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Granular — A photographic finish for still images",
     description: "A native Mac app for film tone, diffusion, halation, and light-responsive grain.",
-    images: [asset("/app-icon-dark.png?v=5")],
+    images: [asset("/app-icon-dark.png?v=6")],
   },
   icons: {
-    icon: { url: asset("/favicon.png?v=5"), type: "image/png", sizes: "64x64" },
-    shortcut: asset("/favicon.png?v=5"),
-    apple: { url: asset("/apple-touch-icon.png?v=5"), sizes: "180x180" },
+    icon: { url: asset("/favicon.png?v=6"), type: "image/png", sizes: "64x64" },
+    shortcut: asset("/favicon.png?v=6"),
+    apple: { url: asset("/apple-touch-icon.png?v=6"), sizes: "180x180" },
   },
 };
 
