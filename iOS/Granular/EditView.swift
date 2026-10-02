@@ -186,16 +186,16 @@ struct EditView: View {
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 
-    /// Small capitals on a grey capsule, like the Camera app's labels.
+    /// Capitals on a grey tag, as Photos labels the adjustment in hand.
     private var caption: some View {
         Text(isEnabled(effect) ? effect.title : "\(effect.title) · Off")
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 17))
             .textCase(.uppercase)
-            .kerning(0.8)
-            .foregroundStyle(isEnabled(effect) ? .primary : .secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(Color(white: 0.2, opacity: 0.85), in: .capsule)
+            .kerning(0.4)
+            .foregroundStyle(.white.opacity(isEnabled(effect) ? 0.8 : 0.5))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Color(white: 0.32, opacity: 0.7), in: .rect(cornerRadius: 4, style: .continuous))
             .contentTransition(.opacity)
             .allowsHitTesting(false)
     }
