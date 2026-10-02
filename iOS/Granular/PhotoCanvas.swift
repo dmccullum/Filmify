@@ -44,7 +44,7 @@ final class PhotoScrollView: UIScrollView, UIScrollViewDelegate {
     var onDisplaySize: (CGFloat) -> Void = { _ in }
     var fitInsets: UIEdgeInsets = .zero {
         didSet {
-            if fitInsets != oldValue { refit() }
+            if !fitInsets.isClose(to: oldValue) { refit() }
         }
     }
 
@@ -174,6 +174,13 @@ final class PhotoScrollView: UIScrollView, UIScrollViewDelegate {
         case .ended, .cancelled, .failed: onPressing(false)
         default: break
         }
+    }
+}
+
+private extension UIEdgeInsets {
+    func isClose(to other: UIEdgeInsets) -> Bool {
+        abs(top - other.top) < 1 && abs(left - other.left) < 1
+            && abs(bottom - other.bottom) < 1 && abs(right - other.right) < 1
     }
 }
 

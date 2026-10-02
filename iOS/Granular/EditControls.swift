@@ -6,6 +6,8 @@ import SwiftUI
 /// One effect in the tool bar under the photo: its symbol, white when
 /// chosen, grey otherwise, and faint while the effect is off.
 struct ToolTab: View {
+    static let width: CGFloat = 28
+
     let effect: EditEffect
     let isSelected: Bool
     let isEnabled: Bool
@@ -24,8 +26,11 @@ struct ToolTab: View {
                     .opacity(isModified ? 1 : 0)
             }
             .foregroundStyle(style)
-            .frame(maxWidth: .infinity, minHeight: 44)
+            .frame(width: ToolTab.width, height: 44)
+            // Reaches past the glyph, so the row is easy to hit end to end.
+            .padding(.horizontal, 10)
             .contentShape(Rectangle())
+            .padding(.horizontal, -10)
         }
         .buttonStyle(.plain)
         .animation(.smooth(duration: 0.2), value: isSelected)
@@ -63,7 +68,7 @@ struct ParameterSlider: View {
             Text(parameter.title)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .frame(width: 76, alignment: .leading)
+                .frame(width: 80, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
                     withAnimation(.smooth) { value = recipeValue }
@@ -85,8 +90,8 @@ struct ParameterSlider: View {
                 .animation(.snappy(duration: 0.15), value: value)
                 .accessibilityHidden(true)
         }
-        .font(.footnote)
-        .frame(height: 34)
+        .font(.subheadline)
+        .frame(height: 44)
         // A light tap as the slider passes the recipe's own value.
         .sensoryFeedback(trigger: value) { old, new in
             (old - recipeValue).sign != (new - recipeValue).sign || new == recipeValue ? .selection : nil
@@ -131,6 +136,8 @@ struct StockStrip: View {
 }
 
 private struct StockTile: View {
+    static let width: CGFloat = 52
+
     let stock: FilmStockID
     let thumbnail: CGImage?
     let isSelected: Bool
@@ -148,7 +155,7 @@ private struct StockTile: View {
                             .transition(.opacity)
                     }
                 }
-                .frame(width: 40, height: 40)
+                .frame(width: StockTile.width, height: StockTile.width)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -161,7 +168,7 @@ private struct StockTile: View {
                     .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
                     .lineLimit(1)
-                    .frame(width: 52)
+                    .frame(width: StockTile.width)
             }
             .contentShape(Rectangle())
         }

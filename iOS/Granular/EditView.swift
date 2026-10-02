@@ -63,7 +63,8 @@ struct EditView: View {
         ZStack {
             PhotoCanvas(
                 image: editor.showsOriginal ? editor.original : editor.preview ?? editor.original,
-                insets: UIEdgeInsets(top: 4, left: 0, bottom: controlsHeight + 8, right: 0),
+                // Room for the tallest panel, so the photo stays put as tools change.
+                insets: UIEdgeInsets(top: 4, left: 0, bottom: (controlsHeight + Self.tallestPanel - panelHeight(for: effect)).rounded() + 8, right: 0),
                 geometry: canvas,
                 onPressing: { editor.showsOriginal = $0 },
                 onDisplaySize: { editor.setDisplaySize(longEdge: $0) }
@@ -139,7 +140,7 @@ struct EditView: View {
                 .padding(.top, 2)
 
             EffectPanel(effect: effect)
-                .frame(height: 92)
+                .frame(height: panelHeight(for: effect))
                 .padding(.top, 6)
 
             EditBar(picked: $picked)
@@ -162,11 +163,16 @@ struct EditView: View {
             .allowsHitTesting(false)
         }
         .animation(.smooth(duration: 0.2), value: effect)
+        // A tool palette, like Photos': text grows only so far before it would crowd the photo.
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 
     private var tools: some View {
         HStack(spacing: 0) {
             ForEach(EditEffect.allCases) { candidate in
+                if candidate != EditEffect.allCases.first {
+                    Spacer(minLength: 0)
+                }
                 let isEnabled = isEnabled(candidate)
                 let isModified = candidate.isModified(darkroom.recipe, from: darkroom.currentRecipe)
                 ToolTab(
@@ -194,8 +200,15 @@ struct EditView: View {
                 .accessibilityAction(named: isEnabled ? "Turn Off" : "Turn On") { toggle(candidate) }
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 20)
         .sensoryFeedback(.impact(weight: .light), trigger: darkroom.recipe[keyPath: effect.isEnabled])
+    }
+
+    /// Film Tone's stocks and its first two sliders; two sliders for the rest.
+    private static let tallestPanel: CGFloat = 160
+
+    private func panelHeight(for effect: EditEffect) -> CGFloat {
+        effect.hasStock ? Self.tallestPanel : 96
     }
 
     private func isEnabled(_ effect: EditEffect) -> Bool {
@@ -220,11 +233,12 @@ private struct EffectPanel: View {
     var body: some View {
         @Bindable var darkroom = darkroom
         ScrollView {
-            VStack(spacing: 4) {
+            VStack(spacing: 0) {
                 if effect.hasStock {
                     StockStrip(stock: stockBinding, thumbnails: editor.stockThumbnails)
                         .padding(.horizontal, -20)
-                        .padding(.bottom, 2)
+                        .padding(.top, 2)
+                        .padding(.bottom, 6)
                 }
                 ForEach(effect.parameters) { parameter in
                     ParameterSlider(
@@ -237,7 +251,7 @@ private struct EffectPanel: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, 14)
+            .padding(.bottom, effect.hasStock ? 14 : 0)
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
