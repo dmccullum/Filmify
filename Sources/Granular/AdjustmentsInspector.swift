@@ -114,7 +114,7 @@ private struct LightShapingCard: View {
     var body: some View {
         EffectCard(
             title: "Vignette",
-            symbol: "camera.aperture",
+            symbol: "circle.rectangle.filled.pattern.diagonalline",
             tint: .orange,
             enabled: $settings.isEnabled,
             reset: reset

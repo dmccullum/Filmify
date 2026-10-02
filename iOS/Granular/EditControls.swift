@@ -14,6 +14,11 @@ struct ToolTab: View {
     let isModified: Bool
     let action: () -> Void
 
+    private var accessibilityState: String {
+        guard effect.isToggleable else { return isModified ? "Edited" : "" }
+        return isEnabled ? (isModified ? "On, edited" : "On") : "Off"
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
@@ -37,7 +42,7 @@ struct ToolTab: View {
         .animation(.smooth(duration: 0.25), value: isEnabled)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(effect.title)
-        .accessibilityValue(isEnabled ? (isModified ? "On, edited" : "On") : "Off")
+        .accessibilityValue(accessibilityState)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -70,6 +75,9 @@ struct ParameterSlider: View {
 
     static let height: CGFloat = 44
 
+    @State private var isTracking = false
+    @State private var resetsOnRelease = false
+
     var body: some View {
         HStack(spacing: 12) {
             Text(parameter.title)
@@ -78,7 +86,16 @@ struct ParameterSlider: View {
                 .frame(width: 80, alignment: .leading)
                 .accessibilityHidden(true)
 
-            Slider(value: $value, in: parameter.range, onEditingChanged: onEditing)
+            Slider(value: $value, in: parameter.range) { editing in
+                isTracking = editing
+                onEditing(editing)
+                // The slider sets its own value as the touch lifts, so a
+                // double-tap on it resets only after that.
+                if !editing, resetsOnRelease {
+                    resetsOnRelease = false
+                    DispatchQueue.main.async { reset() }
+                }
+            }
             .accessibilityLabel(parameter.title)
             .accessibilityValue(parameter.display.accessibilityText(for: value))
             .accessibilityAction(named: "Reset to Recipe Value") { value = recipeValue }
@@ -96,12 +113,16 @@ struct ParameterSlider: View {
         .contentShape(Rectangle())
         // Alongside the slider's own drag, so it reaches the track too.
         .simultaneousGesture(TapGesture(count: 2).onEnded {
-            withAnimation(.smooth) { value = recipeValue }
+            if isTracking { resetsOnRelease = true } else { reset() }
         })
         // A light tap as the slider passes the recipe's own value.
         .sensoryFeedback(trigger: value) { old, new in
             (old - recipeValue).sign != (new - recipeValue).sign || new == recipeValue ? .selection : nil
         }
+    }
+
+    private func reset() {
+        withAnimation(.smooth) { value = recipeValue }
     }
 }
 

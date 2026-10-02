@@ -34,7 +34,7 @@ enum EditEffect: String, CaseIterable, Identifiable {
         case .film: "film"
         case .light: "circle.lefthalf.filled"
         case .color: "paintpalette"
-        case .vignette: "camera.aperture"
+        case .vignette: "circle.rectangle.filled.pattern.diagonalline"
         case .lensBlur: "drop.halffull"
         case .diffusion: "circle.dotted"
         case .halation: "sun.horizon"
@@ -44,6 +44,8 @@ enum EditEffect: String, CaseIterable, Identifiable {
     }
 
     /// Film, Light and Color are all Film Tone, so they're on or off together.
+    /// On iPhone they're never turned off: Film has None, and Light and
+    /// Color are adjustments rather than effects.
     var isEnabled: WritableKeyPath<FilmRecipe, Bool> {
         switch self {
         case .film, .light, .color: \.tone.isEnabled
@@ -53,6 +55,14 @@ enum EditEffect: String, CaseIterable, Identifiable {
         case .halation: \.halation.isEnabled
         case .glow: \.landscapeGlow.isEnabled
         case .grain: \.grain.isEnabled
+        }
+    }
+
+    /// Whether the tool can be turned off, rather than only set to nothing.
+    var isToggleable: Bool {
+        switch self {
+        case .film, .light, .color: false
+        default: true
         }
     }
 
@@ -134,6 +144,8 @@ enum EditEffect: String, CaseIterable, Identifiable {
     func isModified(_ recipe: FilmRecipe, from original: FilmRecipe) -> Bool {
         var reset = recipe
         self.reset(&reset, to: original)
+        // Film Tone coming on by itself, as an edit turns it on, isn't a change.
+        if !isToggleable { reset.tone.isEnabled = recipe.tone.isEnabled }
         return reset != recipe
     }
 }

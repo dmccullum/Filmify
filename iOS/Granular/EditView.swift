@@ -222,15 +222,21 @@ struct EditView: View {
                     }
                 }
                 .contextMenu {
-                    Button(isEnabled ? "Turn Off" : "Turn On", systemImage: "power") {
-                        toggle(candidate)
+                    if candidate.isToggleable {
+                        Button(isEnabled ? "Turn Off" : "Turn On", systemImage: "power") {
+                            toggle(candidate)
+                        }
                     }
                     Button("Reset \(candidate.title)", systemImage: "arrow.uturn.backward") {
                         withAnimation(.smooth) { candidate.reset(&darkroom.recipe, to: darkroom.currentRecipe) }
                     }
                     .disabled(!isModified)
                 }
-                .accessibilityAction(named: isEnabled ? "Turn Off" : "Turn On") { toggle(candidate) }
+                .accessibilityActions {
+                    if candidate.isToggleable {
+                        Button(isEnabled ? "Turn Off" : "Turn On") { toggle(candidate) }
+                    }
+                }
             }
         }
         .padding(.horizontal, 20)
@@ -245,10 +251,11 @@ struct EditView: View {
     private static let panelHeight = CGFloat(EditEffect.mostParameters) * ParameterSlider.height
 
     private func isEnabled(_ effect: EditEffect) -> Bool {
-        darkroom.recipe[keyPath: effect.isEnabled]
+        !effect.isToggleable || darkroom.recipe[keyPath: effect.isEnabled]
     }
 
     private func toggle(_ effect: EditEffect) {
+        guard effect.isToggleable else { return }
         withAnimation(.smooth(duration: 0.25)) {
             darkroom.recipe[keyPath: effect.isEnabled].toggle()
         }
@@ -282,9 +289,8 @@ private struct EffectPanel: View {
                     if editing { enable() }
                 }
                 .disabled(effect.hasStock && parameter.id == "Amount" && darkroom.recipe.tone.stock == .none)
-                // The sliders dim while the effect's off; the stocks don't,
-                // since choosing one turns Film on.
-                .opacity(darkroom.recipe[keyPath: effect.isEnabled] ? 1 : 0.5)
+                // The sliders dim while the effect's off.
+                .opacity(!effect.isToggleable || darkroom.recipe[keyPath: effect.isEnabled] ? 1 : 0.5)
             }
         }
         .padding(.horizontal, 20)

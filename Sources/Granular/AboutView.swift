@@ -129,7 +129,7 @@ private struct CounterReadout: View {
 private struct PipelineDial: View {
     private static let stages: [(symbol: String, name: String)] = [
         ("film", "Film Tone"),
-        ("camera.aperture", "Vignette"),
+        ("circle.rectangle.filled.pattern.diagonalline", "Vignette"),
         ("drop.halffull", "Lens Blur"),
         ("circle.dotted", "Diffusion"),
         ("sun.horizon", "Halation"),

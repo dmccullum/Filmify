@@ -26,7 +26,7 @@ enum EffectCenterTarget: String, Equatable {
 
     var symbol: String {
         switch self {
-        case .vignette: "camera.aperture"
+        case .vignette: "circle.rectangle.filled.pattern.diagonalline"
         case .lensBlur: "drop.halffull"
         }
     }
