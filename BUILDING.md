@@ -39,6 +39,12 @@ Run the tests with:
 swift test
 ```
 
+The rendering library, GranularCore, also builds for iOS. To run its tests on an iPhone simulator:
+
+```sh
+xcodebuild test -scheme GranularCore -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
+
 ## Troubleshooting
 
 If more than one Xcode installation is present, select the one to use:
