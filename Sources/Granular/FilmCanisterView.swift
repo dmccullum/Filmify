@@ -78,6 +78,10 @@ struct FilmCanisterView: View {
     let recipeName: String
     /// Rendered height; everything is laid out on a 320 pt design grid and scaled.
     let height: CGFloat
+    /// Puts the light-trap lip down the left side, for a tin laid on its side
+    /// with the film coming out of the top.
+    var lipLeading = false
+    var castsShadow = true
 
     private var s: CGFloat { height / CanisterGeometry.height }
 
@@ -120,7 +124,7 @@ struct FilmCanisterView: View {
         // Flatten the caps and body into one layer so no seams show when the
         // canister moves by fractional amounts.
         .drawingGroup()
-        .shadow(color: .black.opacity(0.6), radius: 12 * s, y: 12 * s)
+        .shadow(color: .black.opacity(castsShadow ? 0.6 : 0), radius: 12 * s, y: 12 * s)
     }
 
     // MARK: Labels
@@ -384,8 +388,13 @@ struct FilmCanisterView: View {
         return VStack(spacing: 0) {
             cap(height: g.topCap, steel: steelCaps, top: true)
             HStack(spacing: 0) {
+                if lipLeading {
+                    lip.frame(width: g.lipWidth * s)
+                }
                 label()
-                lip.frame(width: g.lipWidth * s)
+                if !lipLeading {
+                    lip.frame(width: g.lipWidth * s)
+                }
             }
             .overlay(CylinderShade())
             .frame(width: g.bodyWidth * s, height: g.bodyHeight * s)
