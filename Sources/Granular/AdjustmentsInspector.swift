@@ -114,7 +114,7 @@ private struct LightShapingCard: View {
     var body: some View {
         EffectCard(
             title: "Vignette",
-            symbol: "circle.rectangle.filled.pattern.diagonalline",
+            symbol: "circle.dotted.circle",
             tint: .orange,
             enabled: $settings.isEnabled,
             reset: reset
@@ -276,7 +276,7 @@ private struct LandscapeGlowCard: View {
     var body: some View {
         EffectCard(
             title: "Landscape Glow",
-            symbol: "sun.max.fill",
+            symbol: "mountain.2",
             tint: .purple,
             enabled: $settings.isEnabled,
             reset: reset

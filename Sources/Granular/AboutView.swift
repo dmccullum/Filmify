@@ -129,11 +129,11 @@ private struct CounterReadout: View {
 private struct PipelineDial: View {
     private static let stages: [(symbol: String, name: String)] = [
         ("film", "Film Tone"),
-        ("circle.rectangle.filled.pattern.diagonalline", "Vignette"),
+        ("circle.dotted.circle", "Vignette"),
         ("drop.halffull", "Lens Blur"),
         ("circle.dotted", "Diffusion"),
         ("sun.horizon", "Halation"),
-        ("sun.max.fill", "Landscape Glow"),
+        ("mountain.2", "Landscape Glow"),
         ("aqi.medium", "Film Grain")
     ]
     private static let step = 360.0 / Double(stages.count)

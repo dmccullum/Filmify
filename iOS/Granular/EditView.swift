@@ -271,7 +271,6 @@ private struct EffectPanel: View {
     let effect: EditEffect
 
     var body: some View {
-        @Bindable var darkroom = darkroom
         VStack(spacing: 0) {
             if effect.hasStock {
                 StockStrip(stock: stockBinding, thumbnails: editor.stockThumbnails)
@@ -282,13 +281,13 @@ private struct EffectPanel: View {
             ForEach(effect.parameters) { parameter in
                 ParameterSlider(
                     parameter: parameter,
-                    value: $darkroom.recipe[dynamicMember: parameter.value],
-                    recipeValue: darkroom.currentRecipe[keyPath: parameter.value]
+                    value: binding(for: parameter.value),
+                    recipeValue: shown(darkroom.currentRecipe)[keyPath: parameter.value]
                 ) { editing in
                     darkroom.setAdjusting(editing)
                     if editing { enable() }
                 }
-                .disabled(effect.hasStock && parameter.id == "Amount" && darkroom.recipe.tone.stock == .none)
+                .disabled(effect.hasStock && parameter.id == "Amount" && shown(darkroom.recipe).tone.stock == .none)
                 // The sliders dim while the effect's off.
                 .opacity(!effect.isToggleable || darkroom.recipe[keyPath: effect.isEnabled] ? 1 : 0.5)
             }
@@ -299,20 +298,30 @@ private struct EffectPanel: View {
     }
 
     private var stockBinding: Binding<FilmStockID> {
+        binding(for: \.tone.stock)
+    }
+
+    /// The recipe as this tool shows it: Film, Light and Color show Film
+    /// Tone as it renders, since they can't be turned off here.
+    private func shown(_ recipe: FilmRecipe) -> FilmRecipe {
+        effect.isToggleable ? recipe : recipe.withVisibleTone
+    }
+
+    /// Film, Light and Color change Film Tone from what's seen, turning it on.
+    private func binding<Value>(for keyPath: WritableKeyPath<FilmRecipe, Value>) -> Binding<Value> {
         Binding {
-            darkroom.recipe.tone.stock
-        } set: { stock in
-            darkroom.recipe.tone.stock = stock
-            // Choosing a stock is a request to see it.
-            if stock != .none {
-                darkroom.recipe.tone.isEnabled = true
-            }
+            shown(darkroom.recipe)[keyPath: keyPath]
+        } set: { value in
+            var recipe = shown(darkroom.recipe)
+            recipe[keyPath: keyPath] = value
+            if !effect.isToggleable { recipe.tone.isEnabled = true }
+            darkroom.recipe = recipe
         }
     }
 
     /// Adjusting an effect that's off turns it on, so the change can be seen.
     private func enable() {
-        guard !darkroom.recipe[keyPath: effect.isEnabled] else { return }
+        guard effect.isToggleable, !darkroom.recipe[keyPath: effect.isEnabled] else { return }
         withAnimation(.smooth) { darkroom.recipe[keyPath: effect.isEnabled] = true }
     }
 }

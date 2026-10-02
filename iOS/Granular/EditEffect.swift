@@ -32,13 +32,13 @@ enum EditEffect: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .film: "film"
-        case .light: "circle.lefthalf.filled"
+        case .light: "sun.max"
         case .color: "paintpalette"
-        case .vignette: "circle.rectangle.filled.pattern.diagonalline"
+        case .vignette: "circle.dotted.circle"
         case .lensBlur: "drop.halffull"
         case .diffusion: "circle.dotted"
         case .halation: "sun.horizon"
-        case .glow: "sun.max.fill"
+        case .glow: "mountain.2"
         case .grain: "aqi.medium"
         }
     }
@@ -142,8 +142,9 @@ enum EditEffect: String, CaseIterable, Identifiable {
     }
 
     func isModified(_ recipe: FilmRecipe, from original: FilmRecipe) -> Bool {
+        let recipe = isToggleable ? recipe : recipe.withVisibleTone
         var reset = recipe
-        self.reset(&reset, to: original)
+        self.reset(&reset, to: isToggleable ? original : original.withVisibleTone)
         // Film Tone coming on by itself, as an edit turns it on, isn't a change.
         if !isToggleable { reset.tone.isEnabled = recipe.tone.isEnabled }
         return reset != recipe
@@ -163,5 +164,16 @@ struct EffectParameter: Identifiable {
         self.value = value
         self.range = range
         self.display = display ?? .proportion(in: range)
+    }
+}
+
+extension FilmRecipe {
+    /// The recipe with Film Tone as it renders: switched off, it's the same as
+    /// on with no stock and nothing adjusted, which is how iPhone shows it.
+    var withVisibleTone: FilmRecipe {
+        guard !tone.isEnabled else { return self }
+        var recipe = self
+        recipe.tone = FilmToneSettings()
+        return recipe
     }
 }
