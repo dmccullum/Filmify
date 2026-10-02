@@ -38,7 +38,7 @@ enum EditEffect: String, CaseIterable, Identifiable {
         case .lensBlur: "drop.halffull"
         case .diffusion: "circle.dotted"
         case .halation: "sun.horizon"
-        case .glow: "mountain.2"
+        case .glow: "mountain.2.circle"
         case .grain: "aqi.medium"
         }
     }

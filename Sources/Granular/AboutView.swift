@@ -133,7 +133,7 @@ private struct PipelineDial: View {
         ("drop.halffull", "Lens Blur"),
         ("circle.dotted", "Diffusion"),
         ("sun.horizon", "Halation"),
-        ("mountain.2", "Landscape Glow"),
+        ("mountain.2.circle", "Landscape Glow"),
         ("aqi.medium", "Film Grain")
     ]
     private static let step = 360.0 / Double(stages.count)

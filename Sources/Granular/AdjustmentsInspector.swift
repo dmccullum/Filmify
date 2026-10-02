@@ -276,7 +276,7 @@ private struct LandscapeGlowCard: View {
     var body: some View {
         EffectCard(
             title: "Landscape Glow",
-            symbol: "mountain.2",
+            symbol: "mountain.2.circle",
             tint: .purple,
             enabled: $settings.isEnabled,
             reset: reset
