@@ -63,7 +63,7 @@ struct EditView: View {
         ZStack {
             PhotoCanvas(
                 image: editor.showsOriginal ? editor.original : editor.preview ?? editor.original,
-                insets: UIEdgeInsets(top: 4, left: 0, bottom: controlsHeight.rounded() + 8, right: 0),
+                insets: UIEdgeInsets(top: 4, left: 0, bottom: controlsHeight.rounded() + 4, right: 0),
                 geometry: canvas,
                 onPressing: { editor.showsOriginal = $0 },
                 onDisplaySize: { editor.setDisplaySize(longEdge: $0) }
@@ -130,20 +130,8 @@ struct EditView: View {
 
     private var controls: some View {
         VStack(spacing: 0) {
-            // Small capitals on a grey capsule, like the Camera app's labels.
-            Text(isEnabled(effect) ? effect.title : "\(effect.title) · Off")
-                .font(.system(size: 12, weight: .semibold))
-                .textCase(.uppercase)
-                .kerning(0.8)
-                .foregroundStyle(isEnabled(effect) ? .primary : .secondary)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(Color(white: 0.2, opacity: 0.85), in: .capsule)
-                .contentTransition(.opacity)
-                .padding(.top, 14)
-
             tools
-                .padding(.top, 2)
+                .padding(.top, 10)
 
             // As tall as the tool with the most sliders, so nothing scrolls
             // and the tools stay put.
@@ -154,11 +142,18 @@ struct EditView: View {
             EditBar(picked: $picked)
                 .padding(.top, 6)
         }
+        // Over the foot of the photo, as in Photos, so the photo needn't
+        // make room for it.
+        .overlay(alignment: .top) {
+            caption
+                .alignmentGuide(.top) { $0[.bottom] + 6 }
+        }
         .background {
-            // The photo carries on under the controls, softly blurred, as in Photos.
+            // The photo carries on under the controls, blurred and darkened
+            // but never greyed, as in Photos.
             ZStack {
-                Rectangle().fill(.ultraThinMaterial)
-                LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
+                BackdropBlur(intensity: 0.35)
+                LinearGradient(colors: [.black.opacity(0.05), .black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
             }
             .mask {
                 // Eased over a long run, so there's no line where the blur begins.
@@ -189,6 +184,20 @@ struct EditView: View {
         .animation(.smooth(duration: 0.2), value: effect)
         // A tool palette, like Photos': text grows only so far before it would crowd the photo.
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
+    }
+
+    /// Small capitals on a grey capsule, like the Camera app's labels.
+    private var caption: some View {
+        Text(isEnabled(effect) ? effect.title : "\(effect.title) · Off")
+            .font(.system(size: 12, weight: .semibold))
+            .textCase(.uppercase)
+            .kerning(0.8)
+            .foregroundStyle(isEnabled(effect) ? .primary : .secondary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Color(white: 0.2, opacity: 0.85), in: .capsule)
+            .contentTransition(.opacity)
+            .allowsHitTesting(false)
     }
 
     private var tools: some View {

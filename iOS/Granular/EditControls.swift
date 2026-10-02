@@ -210,3 +210,69 @@ extension FilmStockID {
         }
     }
 }
+
+// MARK: - Backdrop
+
+/// A plain blur of what's behind, lighter than a material and with none of
+/// its grey: over black it stays black.
+struct BackdropBlur: UIViewRepresentable {
+    /// From 0, no blur, to 1, the system's full dark blur.
+    let intensity: CGFloat
+
+    func makeUIView(context: Context) -> BackdropBlurView {
+        BackdropBlurView()
+    }
+
+    func updateUIView(_ view: BackdropBlurView, context: Context) {
+        view.intensity = intensity
+    }
+}
+
+final class BackdropBlurView: UIVisualEffectView {
+    private var animator: UIViewPropertyAnimator?
+
+    var intensity: CGFloat = 1 {
+        didSet { if intensity != oldValue { animator?.fractionComplete = intensity } }
+    }
+
+    init() {
+        super.init(effect: nil)
+        isUserInteractionEnabled = false
+        // Sets the blur back up whenever the app returns, which ends any
+        // animator held paused.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(rebuild),
+            name: UIApplication.willEnterForegroundNotification, object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { rebuild() } else { tearDown() }
+    }
+
+    /// A blur stopped part-way through fading in is the only public way to
+    /// one lighter than the system's.
+    @objc private func rebuild() {
+        tearDown()
+        let animator = UIViewPropertyAnimator(duration: 1, curve: .linear) { [weak self] in
+            self?.effect = UIBlurEffect(style: .dark)
+        }
+        animator.pausesOnCompletion = true
+        animator.fractionComplete = intensity
+        self.animator = animator
+    }
+
+    private func tearDown() {
+        guard let animator else { return }
+        animator.stopAnimation(true)
+        self.animator = nil
+        effect = nil
+    }
+
+    deinit {
+        animator?.stopAnimation(true)
+    }
+}
