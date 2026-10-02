@@ -22,8 +22,6 @@ final class AboutWindowController: NSWindowController {
         panel.isReleasedWhenClosed = false
         panel.isRestorable = false
         panel.isExcludedFromWindowsMenu = true
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         super.init(window: panel)
@@ -48,6 +46,7 @@ final class AboutWindowController: NSWindowController {
 /// nameplate and engraving as Instant mode, with the version read off the
 /// amber counters.
 struct AboutView: View {
+    private static let titlebarHeight: CGFloat = 32
     private var info: [String: Any]? { Bundle.main.infoDictionary }
     private var version: String { info?["CFBundleShortVersionString"] as? String ?? "1.0" }
     private var build: String { info?["CFBundleVersion"] as? String ?? "1" }
@@ -96,7 +95,9 @@ struct AboutView: View {
             .padding(.top, 18)
         }
         .frame(width: 420, height: 460)
-        .contentShape(Rectangle())
+        // Drag by the plate, but leave the title bar strip to AppKit so the
+        // close button gets its click instead of starting a window drag.
+        .contentShape(Path(CGRect(x: 0, y: Self.titlebarHeight, width: 420, height: 460 - Self.titlebarHeight)))
         .gesture(WindowDragGesture())
     }
 }
