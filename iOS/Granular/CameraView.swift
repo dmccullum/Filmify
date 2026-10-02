@@ -95,6 +95,20 @@ struct CameraView: View {
         }
         .pickerStyle(.segmented)
         .fixedSize()
+        // Any tap flips it, even on the mode already chosen.
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .overlay {
+            Button {
+                withAnimation(.smooth(duration: 0.3)) { mode = mode == .instant ? .edit : .instant }
+            } label: {
+                Color.clear.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Mode")
+            .accessibilityValue(mode == .instant ? "Instant" : "Edit")
+            .accessibilityHint("Switches to \(mode == .instant ? "Edit" : "Instant")")
+        }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { switchSize = $0 }
     }
 

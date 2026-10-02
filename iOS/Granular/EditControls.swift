@@ -59,7 +59,7 @@ extension Color {
 // MARK: - Sliders
 
 /// One adjustment on a single line: its name, a slider and its value.
-/// Double-tapping the name puts back the recipe's own value.
+/// Double-tapping anywhere along it puts back the recipe's own value.
 struct ParameterSlider: View {
     let parameter: EffectParameter
     @Binding var value: Double
@@ -76,10 +76,6 @@ struct ParameterSlider: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(width: 80, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
-                    withAnimation(.smooth) { value = recipeValue }
-                }
                 .accessibilityHidden(true)
 
             Slider(value: $value, in: parameter.range, onEditingChanged: onEditing)
@@ -97,6 +93,11 @@ struct ParameterSlider: View {
         }
         .font(.subheadline)
         .frame(height: Self.height)
+        .contentShape(Rectangle())
+        // Alongside the slider's own drag, so it reaches the track too.
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
+            withAnimation(.smooth) { value = recipeValue }
+        })
         // A light tap as the slider passes the recipe's own value.
         .sensoryFeedback(trigger: value) { old, new in
             (old - recipeValue).sign != (new - recipeValue).sign || new == recipeValue ? .selection : nil
