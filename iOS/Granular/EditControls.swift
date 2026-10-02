@@ -1,46 +1,39 @@
 import GranularCore
 import SwiftUI
 
-// MARK: - Dials
+// MARK: - Tools
 
-/// One effect on the dial row: its symbol in a glass button, with a ring
-/// showing how much of it is dialled in, as in the Photos editor.
-struct EffectDial: View {
+/// One effect in the tool bar under the photo: its symbol and name, lit when
+/// chosen and dimmed while the effect is off.
+struct ToolTab: View {
     let effect: EditEffect
     let isSelected: Bool
     let isEnabled: Bool
-    let strength: Double
     let isModified: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                ZStack {
-                    Circle()
-                        .trim(from: 0, to: isEnabled ? max(0.001, strength) : 0)
-                        .stroke(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.tint), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .padding(3)
-                    Image(systemName: effect.symbol)
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(isSelected ? AnyShapeStyle(.white) : isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-                }
-                .frame(width: 46, height: 46)
-                .glassEffect(isSelected ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
-
+            VStack(spacing: 5) {
+                Image(systemName: effect.symbol)
+                    .font(.system(size: 19, weight: isSelected ? .semibold : .regular))
+                    .frame(height: 24)
                 Text(effect.shortTitle)
-                    .font(.caption2.weight(isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .font(.caption2.weight(isSelected ? .semibold : .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
+                // Marks a tool that's been changed from the recipe.
+                Circle()
+                    .frame(width: 4, height: 4)
+                    .opacity(isModified ? 1 : 0)
             }
+            .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : isEnabled ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            .frame(maxWidth: .infinity, minHeight: 56)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .animation(.smooth(duration: 0.22), value: isSelected)
-        .animation(.smooth(duration: 0.3), value: isEnabled)
-        .animation(.smooth(duration: 0.18), value: strength)
+        .animation(.smooth(duration: 0.2), value: isSelected)
+        .animation(.smooth(duration: 0.25), value: isEnabled)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(effect.title)
         .accessibilityValue(isEnabled ? (isModified ? "On, edited" : "On") : "Off")

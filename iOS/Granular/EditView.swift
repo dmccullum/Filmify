@@ -12,15 +12,16 @@ struct EditView: View {
     var body: some View {
         VStack(spacing: 0) {
             PhotoPreview(picked: $picked)
-                .padding(.horizontal, 16)
+
+            tools
+                .padding(.top, 10)
+
+            Divider()
+                .padding(.horizontal, 20)
 
             EffectPanel(effect: effect)
                 .frame(height: 196)
-                .padding(.top, 12)
-
-            dials
-                .padding(.top, 10)
-                .padding(.bottom, 6)
+                .padding(.top, 14)
 
             EditBar(picked: $picked)
         }
@@ -57,35 +58,31 @@ struct EditView: View {
         }
     }
 
-    private var dials: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(alignment: .top, spacing: 0) {
-                ForEach(EditEffect.allCases) { candidate in
-                    let isEnabled = darkroom.recipe[keyPath: candidate.isEnabled]
-                    let isModified = candidate.isModified(darkroom.recipe, from: darkroom.currentRecipe)
-                    EffectDial(
-                        effect: candidate,
-                        isSelected: candidate == effect,
-                        isEnabled: isEnabled,
-                        strength: candidate.strength(in: darkroom.recipe),
-                        isModified: isModified
-                    ) {
-                        withAnimation(.smooth(duration: 0.25)) { effect = candidate }
+    private var tools: some View {
+        HStack(spacing: 0) {
+            ForEach(EditEffect.allCases) { candidate in
+                let isEnabled = darkroom.recipe[keyPath: candidate.isEnabled]
+                let isModified = candidate.isModified(darkroom.recipe, from: darkroom.currentRecipe)
+                ToolTab(
+                    effect: candidate,
+                    isSelected: candidate == effect,
+                    isEnabled: isEnabled,
+                    isModified: isModified
+                ) {
+                    withAnimation(.smooth(duration: 0.25)) { effect = candidate }
+                }
+                .contextMenu {
+                    Button(isEnabled ? "Turn Off" : "Turn On", systemImage: "power") {
+                        withAnimation(.smooth) { darkroom.recipe[keyPath: candidate.isEnabled].toggle() }
                     }
-                    .frame(maxWidth: .infinity)
-                    .contextMenu {
-                        Button(isEnabled ? "Turn Off" : "Turn On", systemImage: "power") {
-                            withAnimation(.smooth) { darkroom.recipe[keyPath: candidate.isEnabled].toggle() }
-                        }
-                        Button("Reset \(candidate.title)", systemImage: "arrow.uturn.backward") {
-                            withAnimation(.smooth) { candidate.reset(&darkroom.recipe, to: darkroom.currentRecipe) }
-                        }
-                        .disabled(!isModified)
+                    Button("Reset \(candidate.title)", systemImage: "arrow.uturn.backward") {
+                        withAnimation(.smooth) { candidate.reset(&darkroom.recipe, to: darkroom.currentRecipe) }
                     }
+                    .disabled(!isModified)
                 }
             }
-            .padding(.horizontal, 8)
         }
+        .padding(.horizontal, 6)
     }
 }
 
@@ -189,7 +186,6 @@ private struct PhotoPreview: View {
                 Image(decorative: image, scale: 1)
                     .resizable()
                     .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .onLongPressGesture(minimumDuration: .infinity, maximumDistance: 40) {
                     } onPressingChanged: { isPressing in
                         editor.showsOriginal = isPressing
