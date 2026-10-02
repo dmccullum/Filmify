@@ -33,13 +33,9 @@ struct InstantView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CameraNameplate()
-                .padding(.top, 6)
-                .padding(.bottom, 14)
-
             FilmChamber(
-                style: CanisterStyle(recipe: darkroom.recipe, isModified: false),
-                recipeName: darkroom.recipe.name,
+                style: CanisterStyle(recipe: darkroom.currentRecipe, isModified: darkroom.isRecipeModified),
+                recipeName: darkroom.recipeDisplayName,
                 gate: exposure.map { exposure in
                     let isSpoiled = if case .failed = darkroom.jobs.first(where: { $0.id == exposure.jobID })?.state { true } else { false }
                     return GateExposure(id: exposure.jobID, image: darkroom.thumbnails[exposure.jobID], isSpoiled: isSpoiled)
@@ -61,7 +57,6 @@ struct InstantView: View {
 
             FilmBackStatusBar()
         }
-        .background(AlloySurface().ignoresSafeArea())
         .photosPicker(
             isPresented: $isPicking,
             selection: $picked,
@@ -80,6 +75,12 @@ struct InstantView: View {
         }
         .onChange(of: LeadJobKey(id: darkroom.jobs.first?.id, state: darkroom.jobs.first?.state)) { _, _ in
             leadJobChanged()
+        }
+        .onChange(of: darkroom.exposures) { _, exposures in
+            // A frame saved from Edit mode moves the count on without the film.
+            if darkroom.batch == nil, exposure == nil, !isAdvancing {
+                framesWound = exposures
+            }
         }
         .onAppear {
             framesWound = darkroom.exposures
@@ -171,28 +172,6 @@ struct InstantView: View {
                 darkroom.filmDidSettle()
             }
         }
-    }
-}
-
-/// Tapping the canister lists the recipes to load.
-private struct RecipeMenu<Label: View>: View {
-    @Environment(Darkroom.self) private var darkroom
-    @ViewBuilder let label: () -> Label
-
-    var body: some View {
-        @Bindable var darkroom = darkroom
-        Menu {
-            Picker("Recipe", selection: $darkroom.recipe) {
-                ForEach(FilmRecipe.builtIns, id: \.id) { recipe in
-                    Text(recipe.name).tag(recipe)
-                }
-            }
-        } label: {
-            label()
-        }
-        .menuIndicator(.hidden)
-        .buttonStyle(.plain)
-        .accessibilityLabel("Recipe: \(darkroom.recipe.name)")
     }
 }
 

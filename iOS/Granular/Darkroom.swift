@@ -34,9 +34,25 @@ final class Darkroom {
     private(set) var batch: ProcessingBatch?
     private(set) var thumbnails: [UUID: CGImage] = [:]
 
+    /// The look loaded in the camera: a recipe as chosen, or as adjusted in
+    /// Edit mode. Instant and Edit share it, as they do on the Mac.
     var recipe: FilmRecipe {
-        didSet { UserDefaults.standard.set(recipe.id, forKey: Keys.recipe) }
+        didSet { scheduleRecipeSave() }
     }
+
+    /// The recipe the look started from, which Revert goes back to.
+    private(set) var selectedRecipeID: String
+    private(set) var savedRecipes: [FilmRecipe]
+
+    var availableRecipes: [FilmRecipe] { FilmRecipe.builtIns + savedRecipes }
+
+    var currentRecipe: FilmRecipe {
+        availableRecipes.first { $0.id == selectedRecipeID } ?? .classic35
+    }
+
+    var isRecipeModified: Bool { recipe != currentRecipe }
+
+    var recipeDisplayName: String { isRecipeModified ? "Custom" : currentRecipe.name }
 
     /// Every frame developed since the app was installed.
     private(set) var exposures: Int {
@@ -51,8 +67,11 @@ final class Darkroom {
     private let service: ImageProcessingService?
     private let roll: URL
 
+    @ObservationIgnored private var recipeSaveTask: Task<Void, Never>?
+
     private enum Keys {
-        static let recipe = "recipe"
+        /// Earlier builds kept only the chosen built-in, by ID.
+        static let legacyRecipe = "recipe"
         static let exposures = "exposures"
     }
 
@@ -61,15 +80,73 @@ final class Darkroom {
 
     init() {
         let defaults = UserDefaults.standard
-        let recipeID = defaults.string(forKey: Keys.recipe)
-        recipe = FilmRecipe.builtIns.first { $0.id == recipeID } ?? .classic35
+        let saved = defaults.data(forKey: RecipeKey.saved)
+            .flatMap { try? JSONDecoder().decode([FilmRecipe].self, from: $0) } ?? []
+        savedRecipes = saved
+        let storedID = defaults.string(forKey: RecipeKey.selectedID) ?? defaults.string(forKey: Keys.legacyRecipe)
+        let selected = (FilmRecipe.builtIns + saved).first { $0.id == storedID } ?? .classic35
+        selectedRecipeID = selected.id
+        if defaults.bool(forKey: RecipeKey.isModified),
+           let data = defaults.data(forKey: RecipeKey.working),
+           let working = try? JSONDecoder().decode(FilmRecipe.self, from: data) {
+            // Keep the originating recipe's identity so Revert still finds it.
+            recipe = selected.applyingAdjustments(of: working)
+        } else {
+            recipe = selected
+        }
         exposures = defaults.integer(forKey: Keys.exposures)
         service = try? ImageProcessingService()
         // A fresh roll every launch: last session's frames are already in Photos.
         roll = FileManager.default.temporaryDirectory.appending(path: "Roll", directoryHint: .isDirectory)
         try? FileManager.default.removeItem(at: roll)
         try? FileManager.default.createDirectory(at: roll, withIntermediateDirectories: true)
+        if defaults.object(forKey: Keys.legacyRecipe) != nil {
+            persistRecipe()
+            defaults.removeObject(forKey: Keys.legacyRecipe)
+        }
     }
+
+    // MARK: Recipes
+
+    func selectRecipe(_ recipe: FilmRecipe) {
+        selectedRecipeID = recipe.id
+        self.recipe = recipe
+        persistRecipe()
+    }
+
+    /// Puts the look back to the recipe it started from.
+    func revertRecipe() {
+        recipe = currentRecipe
+        persistRecipe()
+    }
+
+    func persistRecipe() {
+        recipeSaveTask?.cancel()
+        recipeSaveTask = nil
+        let defaults = UserDefaults.standard
+        defaults.set(selectedRecipeID, forKey: RecipeKey.selectedID)
+        defaults.set(isRecipeModified, forKey: RecipeKey.isModified)
+        if let data = try? JSONEncoder().encode(recipe) {
+            defaults.set(data, forKey: RecipeKey.working)
+        }
+    }
+
+    /// A slider changes the recipe on every tick; save once it rests.
+    private func scheduleRecipeSave() {
+        recipeSaveTask?.cancel()
+        recipeSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.persistRecipe()
+        }
+    }
+
+    /// A frame developed in Edit mode and saved to the library.
+    func recordExposure() {
+        exposures += 1
+    }
+
+    // MARK: Instant
 
     func develop(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
@@ -169,7 +246,7 @@ final class Darkroom {
 
     /// Photos runs the change block on its own queue, so it's built here, away
     /// from the main actor, rather than inherit the darkroom's isolation.
-    nonisolated private static func addToLibrary(_ url: URL) async throws {
+    nonisolated static func addToLibrary(_ url: URL) async throws {
         try await PHPhotoLibrary.shared().performChanges {
             PHAssetCreationRequest.forAsset().addResource(with: .photo, fileURL: url, options: nil)
         }

@@ -289,13 +289,6 @@ extension AppModel {
     }
 }
 
-enum RecipeKey {
-    static let saved = "recipes.saved"
-    static let selectedID = "recipes.selectedID"
-    static let working = "recipes.working"
-    static let isModified = "recipes.isModified"
-}
-
 // MARK: - Undo
 
 /// What Edit ▸ Undo puts back for a change to the recipe library: the saved
