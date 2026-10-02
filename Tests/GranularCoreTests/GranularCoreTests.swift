@@ -4,7 +4,7 @@ import Testing
 @testable import GranularCore
 
 @Test func builtInRecipesHaveStableIdentifiersAndRanges() {
-    #expect(FilmRecipe.builtIns.map(\.name) == ["Clean 120", "Classic 35", "Extra 35", "Soft 16"])
+    #expect(FilmRecipe.builtIns.map(\.name) == ["Clean 120", "Classic 35", "Extra 35", "Soft 16", "Raw"])
     #expect(Set(FilmRecipe.builtIns.map(\.id)).count == FilmRecipe.builtIns.count)
 
     for recipe in FilmRecipe.builtIns {
@@ -19,6 +19,18 @@ import Testing
         #expect((0 ... 1).contains(recipe.grain.amount))
         #expect(recipe.grain.grainSize > 0)
     }
+}
+
+@Test func rawRecipeLeavesThePhotoAlone() throws {
+    let recipe = try #require(FilmRecipe.builtIns.first { $0.id == "raw" })
+
+    #expect(!recipe.tone.isEnabled)
+    #expect(!recipe.lightShaping.isEnabled)
+    #expect(!recipe.lensBlur.isEnabled)
+    #expect(!recipe.diffusion.isEnabled)
+    #expect(!recipe.halation.isEnabled)
+    #expect(!recipe.landscapeGlow.isEnabled)
+    #expect(!recipe.grain.isEnabled)
 }
 
 @Test func landscapeGlowDefaultsAreRestrainedAndDisabled() {

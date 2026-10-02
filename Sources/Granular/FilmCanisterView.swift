@@ -9,6 +9,7 @@ enum CanisterStyle: Hashable {
     case extra
     case clean
     case soft
+    case raw
     case printed(CanisterDesign, detail: String)
     case bulk(String)
 
@@ -22,6 +23,7 @@ enum CanisterStyle: Hashable {
         case "extra-35": self = .extra
         case "clean-120": self = .clean
         case "soft-16": self = .soft
+        case "raw": self = .raw
         default: self.init(design: CanisterDesign.resolved(for: recipe), recipe: recipe)
         }
     }
@@ -114,6 +116,12 @@ struct FilmCanisterView: View {
                 tin(steelCaps: true) {
                     label(panel: teal, panelText: paleTeal,
                           face: paleTeal, name: teal, detail: Color(hex: 0x3F5A52), detailText: "16 · SOFT GLOW")
+                }
+            case .raw:
+                // Matte black, like an unprocessed roll: nothing printed but the name.
+                tin(steelCaps: false) {
+                    label(panel: Color(hex: 0x1F1F21), panelText: Color(hex: 0x6E7175),
+                          face: Color(hex: 0x141415), name: Color(hex: 0x9A9DA1), detail: Color(hex: 0x5C5F63), detailText: "35 · UNPROCESSED")
                 }
             case .printed(let design, let detail):
                 tin(steelCaps: design.steelCaps) { printedLabel(design.layout, detail: detail) }

@@ -521,6 +521,16 @@ public extension FilmRecipe {
                 shadowResponse: 0.72,
                 highlightResponse: 0.28
             )
+        ),
+        // A blank slate: every effect off, to build a look up from nothing.
+        FilmRecipe(
+            id: "raw",
+            name: "Raw",
+            tone: .init(isEnabled: false),
+            lightShaping: .init(isEnabled: false),
+            diffusion: .init(isEnabled: false),
+            halation: .init(isEnabled: false),
+            grain: .init(isEnabled: false)
         )
     ]
 
