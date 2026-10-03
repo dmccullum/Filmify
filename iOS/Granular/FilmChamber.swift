@@ -47,7 +47,7 @@ struct FilmChamber<Canister: View>: View {
     let filmOut: CGFloat
     let reduceMotion: Bool
     let onChoose: () -> Void
-    let onOpen: (ExposedFrame) -> Void
+    let onOpen: (ExposedFrame, CGRect) -> Void
     let onRetry: (UUID) -> Void
     /// The tin, wrapped in whatever opens the recipe menu.
     @ViewBuilder let canister: (_ tin: AnyView) -> Canister
@@ -253,7 +253,7 @@ private struct FilmStrip: View {
     let framesWound: Int
     let reduceMotion: Bool
     let onChoose: () -> Void
-    let onOpen: (ExposedFrame) -> Void
+    let onOpen: (ExposedFrame, CGRect) -> Void
     let onRetry: (UUID) -> Void
 
     private let curlAngles: [Double] = stride(from: 4.0, through: 88, by: 4).map { $0 }
@@ -401,7 +401,7 @@ private struct FilmStrip: View {
                                 slot: slot,
                                 // The curl only repeats the film to look at.
                                 isInteractive: isPrimary,
-                                onOpen: { onOpen(frame) },
+                                onOpen: { onOpen(frame, $0) },
                                 onRetry: { onRetry(frame.id) }
                             )
                         }
@@ -609,31 +609,29 @@ private struct FoggedFrame: View {
     }
 }
 
-/// A frame on the strip. Tapping opens the developed picture; holding it
-/// brings up the rest.
+/// A tap-only frame: open a developed picture or retry a spoiled exposure.
 private struct StripFrame: View {
     let frame: ExposedFrame
     let slot: CGSize
     let isInteractive: Bool
-    let onOpen: () -> Void
+    /// Opens the picture, given where this frame sits on screen.
+    let onOpen: (CGRect) -> Void
     let onRetry: () -> Void
+
+    @State private var screenFrame: CGRect = .zero
 
     var body: some View {
         if isInteractive {
             face
                 .contentShape(Rectangle())
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { screenFrame = $0 }
                 .onTapGesture {
-                    if frame.outputURL != nil { onOpen() } else { onRetry() }
-                }
-                .contextMenu {
-                    menu
-                } preview: {
-                    preview
+                    if frame.outputURL != nil { onOpen(screenFrame) } else { onRetry() }
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilityLabel)
                 .accessibilityAddTraits(.isButton)
-                .accessibilityAction { frame.outputURL != nil ? onOpen() : onRetry() }
+                .accessibilityAction { frame.outputURL != nil ? onOpen(screenFrame) : onRetry() }
         } else {
             face
                 .allowsHitTesting(false)
@@ -655,29 +653,6 @@ private struct StripFrame: View {
         }
         .upright(in: slot)
         .clipShape(RoundedRectangle(cornerRadius: 2))
-    }
-
-    @ViewBuilder
-    private var menu: some View {
-        switch frame.development {
-        case .developed(let url):
-            Button("View", systemImage: "eye", action: onOpen)
-            ShareLink(item: url)
-        case .spoiled(let message):
-            Text(message)
-            Button("Retry", systemImage: "arrow.clockwise", action: onRetry)
-        }
-    }
-
-    /// The print, the right way up and the right way round.
-    @ViewBuilder
-    private var preview: some View {
-        if let image = frame.image {
-            Image(decorative: image, scale: 1)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 360, maxHeight: 480)
-        }
     }
 
     private var accessibilityLabel: String {

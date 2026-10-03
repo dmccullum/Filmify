@@ -19,7 +19,13 @@ struct InstantView: View {
     @State private var filmOut: CGFloat = 0
     @State private var isPicking = false
     @State private var picked: [PhotosPickerItem] = []
-    @State private var viewing: ExposedFrame?
+    @State private var viewing: Lightbox?
+
+    private struct Lightbox {
+        let frame: ExposedFrame
+        /// Where the negative sits on screen, so the print can develop from it.
+        let origin: CGRect
+    }
 
     private struct Exposure: Equatable {
         let jobID: UUID
@@ -48,7 +54,7 @@ struct InstantView: View {
                 filmOut: filmOut,
                 reduceMotion: reduceMotion,
                 onChoose: { isPicking = true },
-                onOpen: { viewing = $0 },
+                onOpen: { frame, origin in viewing = Lightbox(frame: frame, origin: origin) },
                 onRetry: { darkroom.retry($0) }
             ) { tin in
                 RecipeMenu { tin }
@@ -68,9 +74,12 @@ struct InstantView: View {
             darkroom.develop(items)
             picked = []
         }
-        .fullScreenCover(item: $viewing) { frame in
-            if let url = frame.outputURL {
-                FrameViewer(url: url)
+        .overlay {
+            if let viewing, let url = viewing.frame.outputURL {
+                FrameViewer(url: url, negative: viewing.frame.image, origin: viewing.origin) {
+                    self.viewing = nil
+                }
+                .transition(.identity)
             }
         }
         .onChange(of: LeadJobKey(id: darkroom.jobs.first?.id, state: darkroom.jobs.first?.state)) { _, _ in
