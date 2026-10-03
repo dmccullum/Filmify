@@ -15,13 +15,19 @@ public actor ImageProcessingService {
     public func renderPreview(
         sourceURL: URL,
         recipe: FilmRecipe,
-        maximumDimension: CGFloat = 1_600
+        maximumDimension: CGFloat = 1_600,
+        grainDimension: CGFloat? = nil
     ) throws -> CGImage {
         let source = try previewSource(for: sourceURL, maximumDimension: maximumDimension)
         let rendered = try renderer.render(
-            source, recipe: recipe, previewMaximumDimension: maximumDimension
+            source,
+            recipe: recipe,
+            previewMaximumDimension: maximumDimension,
+            grainDimension: grainDimension
         )
-        return try exporter.previewImage(for: rendered, maximumDimension: maximumDimension)
+        return try exporter.previewImage(
+            for: rendered, maximumDimension: max(maximumDimension, grainDimension ?? 0)
+        )
     }
 
     /// The open image decoded once at preview size. Every effect scales with

@@ -108,7 +108,8 @@ public final class FilmRenderer: @unchecked Sendable {
     public func render(
         _ source: CIImage,
         recipe: FilmRecipe,
-        previewMaximumDimension: CGFloat? = nil
+        previewMaximumDimension: CGFloat? = nil,
+        grainDimension: CGFloat? = nil
     ) throws -> CIImage {
         var extent = source.extent.integral
         guard !extent.isEmpty else { throw FilmRendererError.renderFailed }
@@ -140,6 +141,17 @@ public final class FilmRenderer: @unchecked Sendable {
             }
         }
         if recipe.grain.isEnabled, recipe.grain.amount != 0 {
+            // A quick preview resolves everything else small, but grain is
+            // generated on the grid it will be shown at; stretching it up from
+            // the small grid would make it blocky.
+            if let grainDimension, grainDimension > 0 {
+                let scale = grainDimension / max(extent.width, extent.height)
+                if scale > 1 {
+                    image = image.samplingLinear()
+                        .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                    extent = image.extent.integral
+                }
+            }
             image = try applyGrain(image, settings: recipe.grain, extent: extent)
         }
 
@@ -503,9 +515,10 @@ public final class FilmRenderer: @unchecked Sendable {
         settings: GrainSettings,
         extent: CGRect
     ) throws -> CIImage {
+        // Treat the long edge as the 36 mm film dimension in either orientation.
         let particlePixels = max(
             0.20,
-            min(10, extent.width * settings.grainSize / 36_000)
+            min(10, max(extent.width, extent.height) * settings.grainSize / 36_000)
         )
         // Film granularity follows the density of a small surrounding area, not the
         // brightness of each finished pixel in isolation. A softly resolved guide
@@ -1277,28 +1290,34 @@ private extension FilmRenderer {
         );
         float densityNoise = mix(primary, varied, variationMix) * variationNormalization;
 
-        float localLuminance = clamp(
-            dot(max(densityGuide.rgb, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722)),
+        vec4 straightSource = unpremultiply(source);
+        vec4 straightGuide = unpremultiply(densityGuide);
+        // The renderer works in linear Rec. 2020. Shape visibility in perceptual
+        // tones so the shadow peak actually lands in visible darker midtones.
+        float linearLuminance = clamp(
+            dot(max(straightGuide.rgb, vec3(0.0)), vec3(0.2627, 0.6780, 0.0593)),
             0.0,
             1.0
         );
+        float localLuminance = linearLuminance <= 0.0031308
+            ? linearLuminance * 12.92
+            : 1.055 * pow(linearLuminance, 1.0 / 2.4) - 0.055;
         float shadowWeight = pow(1.0 - localLuminance, 0.72);
         float endpointResponse = mix(highlightResponse, shadowResponse, shadowWeight);
 
-        // A developed negative does not become progressively noisier all the way to
-        // display black. Granularity is most legible through the useful density range,
-        // then compresses through both the toe and shoulder. Keep a small residual at
-        // either end so the image never turns unnaturally clean.
-        float toeTransition = smoothstep(0.015, 0.16, localLuminance);
-        float toeCompression = mix(0.38, 1.0, toeTransition);
-        float shoulderTransition = smoothstep(0.68, 1.0, localLuminance);
-        float shoulderCompression = mix(1.0, 0.42, shoulderTransition);
-        float midtoneOccupancy = pow(max(0.0, 4.0 * localLuminance * (1.0 - localLuminance)), 0.65);
-        float densityStructure = mix(0.82, 1.10, midtoneOccupancy);
-        float tonalResponse = endpointResponse * toeCompression * shoulderCompression * densityStructure;
+        // A broad darker-midtone peak, with a quiet toe and an earlier shoulder,
+        // avoids both noisy blocked blacks and conspicuous grain in bright skies.
+        // This is a perceptual film-look model, not a stock-specific simulation.
+        float toeTransition = smoothstep(0.04, 0.40, localLuminance);
+        float toeCompression = mix(0.18, 1.0, toeTransition);
+        float shoulderTransition = smoothstep(0.50, 1.0, localLuminance);
+        float shoulderCompression = mix(1.0, 0.18, shoulderTransition);
+        float tonalResponse = endpointResponse * toeCompression * shoulderCompression * 1.4;
         float sigma = amount * tonalResponse * 0.34;
         float densityDelta = densityNoise * sigma;
-        float densityCompensation = 0.10 * sigma * sigma;
+        // Cancel the mean lift from exponentiating zero-mean density noise. The
+        // normalized field variance is 0.05449: 0.5 * ln(10) * variance.
+        float densityCompensation = 0.06273 * sigma * sigma;
         float luminanceScale = exp2(-(densityDelta + densityCompensation) * 3.321928);
 
         vec3 chromaNoise = vec3(
@@ -1314,13 +1333,13 @@ private extension FilmRenderer {
         // shadows or nearly white highlights. Let their small differences live mostly
         // in the printable density range while the shared silver-density texture
         // continues softly into the extremes.
-        float dyeToe = smoothstep(0.055, 0.24, localLuminance);
+        float dyeToe = smoothstep(0.15, 0.48, localLuminance);
         float dyeShoulder = 1.0 - smoothstep(0.70, 0.97, localLuminance);
         float dyeCloudResponse = mix(0.16, 1.0, dyeToe * dyeShoulder);
         float chromaStrength = amount * clamp(chroma, 0.0, 1.0) * tonalResponse * dyeCloudResponse * 0.50;
         vec3 colorScale = max(vec3(0.05), vec3(1.0) + chromaNoise * chromaStrength);
-        vec3 rgb = max(vec3(0.0), source.rgb * luminanceScale * colorScale);
-        return vec4(rgb, source.a);
+        vec3 rgb = max(vec3(0.0), straightSource.rgb * luminanceScale * colorScale);
+        return premultiply(vec4(rgb, straightSource.a));
     }
     """#
 }

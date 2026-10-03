@@ -147,7 +147,8 @@ final class Editor {
                 let image = try await service.renderPreview(
                     sourceURL: sourceURL,
                     recipe: darkroom.recipe,
-                    maximumDimension: dimension
+                    maximumDimension: dimension,
+                    grainDimension: displayDimension
                 )
                 guard !Task.isCancelled else { return }
                 preview = image
