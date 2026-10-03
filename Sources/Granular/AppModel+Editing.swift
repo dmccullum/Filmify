@@ -164,6 +164,7 @@ extension AppModel {
         }
         previewRefinementTask?.cancel()
         previewRefinementTask = nil
+        updatePreviewDisplayDimension()
         // Setting an observed value tells its views even when it’s unchanged,
         // and this runs with every step of a slider drag.
         if !isRenderingPreview {
@@ -178,15 +179,29 @@ extension AppModel {
     /// past the preview on screen renders a sharper one once the zoom
     /// settles, and panning never renders at all.
     func setPreviewDisplaySize(longEdge: CGFloat) {
-        let dimension = CGFloat(PreviewSizing.renderDimension(
-            displayedLongEdge: Double(longEdge),
-            sourceLongEdge: sourceInfo.map { Double($0.longEdge) }
-        ))
-        guard dimension != previewDisplayDimension else { return }
-        previewDisplayDimension = dimension
-        if previewTask == nil {
+        previewDisplayedLongEdge = longEdge
+        if updatePreviewDisplayDimension(), previewTask == nil {
             scheduleSharperPreview()
         }
+    }
+
+    /// Grain is made on the preview's own pixels, so its preview is rendered at
+    /// exactly the size it's shown. A larger one shrunk to fit softens the
+    /// grain by an amount that changes with every zoom level.
+    private var previewShowsGrain: Bool {
+        recipe.grain.isEnabled && recipe.grain.amount != 0
+    }
+
+    @discardableResult
+    private func updatePreviewDisplayDimension() -> Bool {
+        let dimension = CGFloat(PreviewSizing.renderDimension(
+            displayedLongEdge: Double(previewDisplayedLongEdge),
+            sourceLongEdge: sourceInfo.map { Double($0.longEdge) },
+            exact: previewShowsGrain
+        ))
+        guard dimension != previewDisplayDimension else { return false }
+        previewDisplayDimension = dimension
+        return true
     }
 
     private func startRenderingPreviews() {
@@ -217,7 +232,8 @@ extension AppModel {
                 previewWantsRefinement = false
                 guard PreviewSizing.needsSharperRender(
                     rendered: Double(renderedPreviewDimension),
-                    wanted: Double(previewDisplayDimension)
+                    wanted: Double(previewDisplayDimension),
+                    exact: previewShowsGrain
                 ) else { continue }
                 dimension = previewDisplayDimension
             } else {
@@ -228,7 +244,8 @@ extension AppModel {
                 let image = try await processingService.renderPreview(
                     sourceURL: sourceURL,
                     recipe: recipe,
-                    maximumDimension: dimension
+                    maximumDimension: dimension,
+                    grainDimension: previewShowsGrain ? previewDisplayDimension : nil
                 )
                 guard !Task.isCancelled else { return }
                 processedPreview = NSImage(cgImage: image, size: .zero)
@@ -252,7 +269,8 @@ extension AppModel {
         previewRefinementTask = nil
         guard operationMode == .edit, PreviewSizing.needsSharperRender(
             rendered: Double(renderedPreviewDimension),
-            wanted: Double(previewDisplayDimension)
+            wanted: Double(previewDisplayDimension),
+            exact: previewShowsGrain
         ) else { return }
         previewRefinementTask = Task {
             try? await Task.sleep(for: .milliseconds(300))

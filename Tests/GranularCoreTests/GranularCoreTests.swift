@@ -1413,3 +1413,38 @@ private func labDistance(_ lhs: [Float], _ rhs: [Float]) -> Float {
     #expect(large.extent.width == 512)
     #expect(large.extent.height == 256)
 }
+
+@Test func grainPreviewMatchesTheDevelopedFileAtAnyZoom() throws {
+    let renderer = try FilmRenderer()
+    var recipe = FilmRecipe.classic35
+    recipe.grain.isEnabled = true
+    recipe.grain.amount = 1
+    let fullWidth: CGFloat = 2400
+    let fullHeight: CGFloat = 1800
+    let full = CIImage(color: .init(red: 0.3, green: 0.3, blue: 0.3, alpha: 1))
+        .cropped(to: CGRect(x: 0, y: 0, width: fullWidth, height: fullHeight))
+    let developed = try renderer.render(full, recipe: recipe)
+    for display in [300.0, 800.0, 1500.0] {
+        let small = CIImage(color: .init(red: 0.3, green: 0.3, blue: 0.3, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 600, height: 450))
+        let preview = try renderer.render(
+            small,
+            recipe: recipe,
+            previewMaximumDimension: 600,
+            grainDimension: display,
+            fullSize: CGSize(width: fullWidth, height: fullHeight)
+        )
+        let expected = FilmRenderer.areaScaled(
+            developed, from: developed.extent, toLongEdge: display
+        )
+        let sample = CGRect(x: 20, y: 20, width: 200, height: 150)
+        let previewPixels = renderFloatPixels(preview, extent: sample)
+        let expectedPixels = renderFloatPixels(expected, extent: sample)
+        #expect(abs(preview.extent.width - display) < 0.5)
+        #expect(
+            abs(luminanceCoefficientOfVariation(previewPixels)
+                - luminanceCoefficientOfVariation(expectedPixels)) < 0.002
+        )
+        #expect(meanAbsoluteLuminanceDifference(previewPixels, expectedPixels) < 0.002)
+    }
+}

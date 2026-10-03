@@ -10,8 +10,18 @@ public enum PreviewSizing {
 
     /// The long edge to render for an image shown `displayedLongEdge` screen
     /// pixels long: rounded up to a step, and never past the image's own size.
-    public static func renderDimension(displayedLongEdge: Double, sourceLongEdge: Double?) -> Double {
-        let stepped = max(step, (displayedLongEdge / step).rounded(.up) * step)
+    ///
+    /// `exact` renders at the displayed size itself instead of a step above it,
+    /// for textures like grain that shimmer or soften when the preview is
+    /// resampled to fit.
+    public static func renderDimension(
+        displayedLongEdge: Double,
+        sourceLongEdge: Double?,
+        exact: Bool = false
+    ) -> Double {
+        let stepped = exact
+            ? max(1, displayedLongEdge.rounded())
+            : max(step, (displayedLongEdge / step).rounded(.up) * step)
         guard let sourceLongEdge, sourceLongEdge > 0 else { return stepped }
         return min(stepped, sourceLongEdge)
     }
@@ -22,8 +32,13 @@ public enum PreviewSizing {
     }
 
     /// Whether the preview on screen is soft for how large it's shown, and a
-    /// sharper one should follow.
-    public static func needsSharperRender(rendered: Double, wanted: Double) -> Bool {
-        rendered > 0 && rendered < wanted
+    /// sharper one should follow. An exact preview is also redone when it's
+    /// larger than wanted, since showing it smaller would resample it.
+    public static func needsSharperRender(
+        rendered: Double,
+        wanted: Double,
+        exact: Bool = false
+    ) -> Bool {
+        rendered > 0 && (exact ? rendered != wanted : rendered < wanted)
     }
 }

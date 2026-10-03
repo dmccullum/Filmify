@@ -39,7 +39,7 @@ final class Editor {
 
     /// While a slider moves, previews render no larger than this, so they
     /// keep up; a sharper one follows when it rests.
-    private static let interactiveDimension: CGFloat = 1_024
+    private static let interactiveDimension: CGFloat = 2_048
     private static let stockThumbnailSize = 180
     private static let photoKey = "editing.photo"
 

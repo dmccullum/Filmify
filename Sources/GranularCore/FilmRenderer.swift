@@ -109,7 +109,8 @@ public final class FilmRenderer: @unchecked Sendable {
         _ source: CIImage,
         recipe: FilmRecipe,
         previewMaximumDimension: CGFloat? = nil,
-        grainDimension: CGFloat? = nil
+        grainDimension: CGFloat? = nil,
+        fullSize: CGSize? = nil
     ) throws -> CIImage {
         var extent = source.extent.integral
         guard !extent.isEmpty else { throw FilmRendererError.renderFailed }
@@ -141,6 +142,20 @@ public final class FilmRenderer: @unchecked Sendable {
             }
         }
         if recipe.grain.isEnabled, recipe.grain.amount != 0 {
+            if let fullSize, fullSize.width > 0, fullSize.height > 0,
+               fullSize.width > extent.width || fullSize.height > extent.height {
+                // What you see is what you get: grain is made on the photo's
+                // own pixels, exactly as in the developed file, then shrunk
+                // to the preview the way any viewer shrinks the file.
+                let target = grainDimension ?? max(extent.width, extent.height)
+                return try applyGrainOnFullGrid(
+                    image,
+                    settings: recipe.grain,
+                    extent: extent,
+                    fullSize: fullSize,
+                    outputLongEdge: min(target, max(fullSize.width, fullSize.height))
+                )
+            }
             // A quick preview resolves everything else small, but grain is
             // generated on the grid it will be shown at; stretching it up from
             // the small grid would make it blocky.
@@ -544,6 +559,82 @@ public final class FilmRenderer: @unchecked Sendable {
             throw FilmRendererError.renderFailed
         }
         return output
+    }
+
+    /// Grain for a preview that matches the developed file at any size: the
+    /// small picture is stretched onto the photo's full grid, grained there
+    /// with the same pixels and settings as an export, then averaged back down.
+    private func applyGrainOnFullGrid(
+        _ image: CIImage,
+        settings: GrainSettings,
+        extent: CGRect,
+        fullSize: CGSize,
+        outputLongEdge: CGFloat
+    ) throws -> CIImage {
+        let fullExtent = CGRect(origin: .zero, size: CGSize(
+            width: fullSize.width.rounded(), height: fullSize.height.rounded()
+        ))
+        let scaleX = fullExtent.width / extent.width
+        let scaleY = fullExtent.height / extent.height
+        let upscale = CGAffineTransform(scaleX: scaleX, y: scaleY)
+
+        let particlePixels = max(
+            0.20,
+            min(10, max(fullExtent.width, fullExtent.height) * settings.grainSize / 36_000)
+        )
+        let shortEdge = min(fullExtent.width, fullExtent.height)
+        let fullRadius = max(2, min(16, max(particlePixels * 2.25, shortEdge * 0.0015)))
+        // The density guide is soft, so it's blurred on the small picture.
+        let guide = gaussianBlur(image, radius: fullRadius / max(scaleX, scaleY), extent: extent)
+
+        func onFullGrid(_ small: CIImage) -> CIImage {
+            small.clampedToExtent().samplingLinear()
+                .transformed(by: upscale)
+                .cropped(to: fullExtent)
+        }
+
+        let arguments: [Any] = [
+            onFullGrid(image),
+            onFullGrid(guide),
+            CIVector(cgRect: fullExtent),
+            Float(Self.mappedGrainAmount(settings.amount)),
+            Float(particlePixels),
+            Float(settings.acutance),
+            Float(settings.sizeVariation),
+            Float(settings.chroma),
+            Float(settings.shadowResponse),
+            Float(settings.highlightResponse),
+            Self.mappedGrainSeed(settings.seed)
+        ]
+        guard let grained = grainKernel.apply(extent: fullExtent, arguments: arguments) else {
+            throw FilmRendererError.renderFailed
+        }
+        return Self.areaScaled(
+            grained,
+            from: fullExtent,
+            toLongEdge: outputLongEdge
+        )
+    }
+
+    /// Shrinks by halving, which averages exactly, then a last partial step.
+    /// Dropping straight to a small size would alias fine grain.
+    static func areaScaled(_ image: CIImage, from extent: CGRect, toLongEdge longEdge: CGFloat) -> CIImage {
+        let factor = longEdge / max(extent.width, extent.height)
+        guard factor < 1 else { return image }
+        let width = max(1, (extent.width * factor).rounded())
+        let height = max(1, (extent.height * factor).rounded())
+        var result = image
+        var current = extent.size
+        while current.width / 2 >= width, current.height / 2 >= height {
+            result = result.samplingLinear().transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5))
+            current = CGSize(width: current.width / 2, height: current.height / 2)
+        }
+        if current.width != width || current.height != height {
+            result = result.samplingLinear().transformed(by: CGAffineTransform(
+                scaleX: width / current.width, y: height / current.height
+            ))
+        }
+        return result.cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
     }
 
     static func mappedGrainAmount(_ amount: Double) -> Double {
