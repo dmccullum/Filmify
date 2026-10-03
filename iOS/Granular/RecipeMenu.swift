@@ -10,23 +10,48 @@ struct RecipeMenu<Label: View>: View {
 
     var body: some View {
         Menu {
-            if darkroom.isRecipeModified {
-                Button("Revert to \(darkroom.currentRecipe.name)", systemImage: "arrow.uturn.backward") {
-                    withAnimation(.smooth) { darkroom.revertRecipe() }
-                }
+            Button("Recipes…", systemImage: "square.stack") {
+                darkroom.recipeSheet = .library
             }
             Picker("Recipe", selection: selection) {
-                ForEach(darkroom.availableRecipes) { recipe in
+                ForEach(listedRecipes) { recipe in
                     Text(recipe.name).tag(recipe.id)
+                }
+            }
+            Section {
+                Button("Save as Recipe…", systemImage: "plus") {
+                    darkroom.recipeSheet = .save
+                }
+                if darkroom.canUpdateSelectedRecipe {
+                    Button("Update “\(darkroom.currentRecipe.name)”", systemImage: "arrow.triangle.2.circlepath") {
+                        withAnimation(.smooth) { darkroom.updateSelectedRecipe() }
+                    }
+                }
+            }
+            if darkroom.isRecipeModified {
+                Section {
+                    Button("Revert to \(darkroom.currentRecipe.name)", systemImage: "arrow.uturn.backward") {
+                        withAnimation(.smooth) { darkroom.revertRecipe() }
+                    }
                 }
             }
         } label: {
             label()
         }
+        // Laid out as written, wherever the menu opens, so Raw stays last.
+        .menuOrder(.fixed)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: darkroom.selectedRecipeID)
         .accessibilityLabel("Recipe: \(darkroom.recipeDisplayName)")
+    }
+
+    /// Your own recipes first, then the built-ins from Soft 16 down to the
+    /// blank slate.
+    private var listedRecipes: [FilmRecipe] {
+        let builtIns = FilmRecipe.builtIns.filter { $0.id != "raw" }.reversed()
+            + FilmRecipe.builtIns.filter { $0.id == "raw" }
+        return darkroom.savedRecipes + builtIns
     }
 
     /// No recipe is ticked while the look has been edited away from it.

@@ -45,9 +45,20 @@ final class Darkroom {
 
     /// The recipe the look started from, which Revert goes back to.
     private(set) var selectedRecipeID: String
-    private(set) var savedRecipes: [FilmRecipe]
+    private var library: RecipeLibrary
 
-    var availableRecipes: [FilmRecipe] { FilmRecipe.builtIns + savedRecipes }
+    /// The recipes made on this phone or imported, in the order they're listed.
+    var savedRecipes: [FilmRecipe] { library.saved }
+
+    /// The sheet over the camera, if any. It lives here so both recipe menus,
+    /// and a recipe file being opened, can present it.
+    var recipeSheet: RecipeSheet?
+    /// The last recipe imported, which the library scrolls to once.
+    var lastImportedID: String?
+    /// What went wrong importing recipe files, for the library to show.
+    var importAlert: ImportAlert?
+
+    var availableRecipes: [FilmRecipe] { library.all }
 
     var currentRecipe: FilmRecipe {
         availableRecipes.first { $0.id == selectedRecipeID } ?? .classic35
@@ -98,7 +109,7 @@ final class Darkroom {
         let defaults = UserDefaults.standard
         let saved = defaults.data(forKey: RecipeKey.saved)
             .flatMap { try? JSONDecoder().decode([FilmRecipe].self, from: $0) } ?? []
-        savedRecipes = saved
+        library = RecipeLibrary(saved: saved)
         let storedID = defaults.string(forKey: RecipeKey.selectedID) ?? defaults.string(forKey: Keys.legacyRecipe)
         let selected = (FilmRecipe.builtIns + saved).first { $0.id == storedID } ?? .classic35
         selectedRecipeID = selected.id
@@ -134,6 +145,137 @@ final class Darkroom {
     func revertRecipe() {
         recipe = currentRecipe
         persistRecipe()
+    }
+
+    // MARK: Library
+
+    /// Whether the look has edits that Update would save into a recipe of the
+    /// phone's own.
+    var canUpdateSelectedRecipe: Bool {
+        isRecipeModified && library.contains(savedID: selectedRecipeID)
+    }
+
+    func isSavedRecipe(_ id: String) -> Bool {
+        library.contains(savedID: id)
+    }
+
+    /// Saves the look as a new recipe and puts it to use, as is.
+    @discardableResult
+    func saveCurrentAsRecipe(named name: String, canister: String?) -> FilmRecipe? {
+        guard let saved = library.save(recipe, named: name, canister: canister) else { return nil }
+        selectedRecipeID = saved.id
+        setLook(saved)
+        persistRecipes()
+        persistRecipe()
+        return saved
+    }
+
+    /// Saves the edits into the saved recipe they started from.
+    func updateSelectedRecipe() {
+        guard canUpdateSelectedRecipe, let updated = library.update(id: selectedRecipeID, with: recipe) else { return }
+        setLook(updated)
+        persistRecipes()
+        persistRecipe()
+    }
+
+    @discardableResult
+    func renameRecipe(id: String, to name: String) -> Bool {
+        guard library.rename(id: id, to: name) else { return false }
+        if selectedRecipeID == id, let renamed = savedRecipes.first(where: { $0.id == id }) {
+            var look = recipe
+            look.name = renamed.name
+            setLook(look)
+        }
+        persistRecipes()
+        persistRecipe()
+        return true
+    }
+
+    func setCanister(_ canister: String?, forRecipe id: String) {
+        library.setCanister(canister, for: id)
+        if selectedRecipeID == id {
+            var look = recipe
+            look.canister = canister
+            setLook(look)
+        }
+        persistRecipes()
+        persistRecipe()
+    }
+
+    /// Saves a copy of any recipe, in the same canister.
+    @discardableResult
+    func duplicateRecipe(id: String) -> FilmRecipe? {
+        guard let original = availableRecipes.first(where: { $0.id == id }),
+              let copy = library.duplicate(id: id, canister: CanisterDesign.resolved(for: original).id) else { return nil }
+        persistRecipes()
+        return copy
+    }
+
+    /// Deletes a saved recipe. If it was in use the look stays as it is and
+    /// simply no longer belongs to a saved recipe.
+    func deleteRecipe(id: String) {
+        guard library.contains(savedID: id) else { return }
+        library.delete(id: id)
+        if selectedRecipeID == id {
+            selectedRecipeID = FilmRecipe.classic35.id
+            setLook(FilmRecipe.classic35.applyingAdjustments(of: recipe))
+        }
+        persistRecipes()
+        persistRecipe()
+    }
+
+    func moveSavedRecipes(fromOffsets source: IndexSet, toOffset destination: Int) {
+        library.move(fromOffsets: source, toOffset: destination)
+        persistRecipes()
+    }
+
+    /// Adds the recipes in these files to the library, each under a name of
+    /// its own. Files that can't be read are reported in `importAlert`.
+    @discardableResult
+    func importRecipes(from urls: [URL]) -> (imported: [FilmRecipe], failures: [(String, Error)]) {
+        var decoded: [FilmRecipe] = []
+        var failures: [(String, Error)] = []
+        for url in urls {
+            let isScoped = url.startAccessingSecurityScopedResource()
+            defer { if isScoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let file = try RecipeFile.decode(
+                    Data(contentsOf: url),
+                    fallbackName: url.deletingPathExtension().lastPathComponent
+                )
+                decoded.append(file.recipe)
+            } catch {
+                failures.append((url.lastPathComponent, error))
+            }
+        }
+        let imported = library.importing(decoded)
+        if !imported.isEmpty {
+            persistRecipes()
+            lastImportedID = imported.last?.id
+        }
+        if let failure = failures.first {
+            importAlert = ImportAlert(
+                title: failures.count == 1
+                    ? "“\(failure.0)” couldn’t be imported."
+                    : "\(failures.count) files couldn’t be imported.",
+                message: failure.1.localizedDescription
+            )
+        }
+        return (imported, failures)
+    }
+
+    func persistRecipes() {
+        guard let data = try? JSONEncoder().encode(savedRecipes) else { return }
+        UserDefaults.standard.set(data, forKey: RecipeKey.saved)
+    }
+
+    /// Sets the look without a step on the undo stack: library changes
+    /// aren't undone with the look.
+    private func setLook(_ look: FilmRecipe) {
+        let wasRestoring = isRestoring
+        isRestoring = true
+        defer { isRestoring = wasRestoring }
+        recipe = look
     }
 
     // MARK: Undo
@@ -372,6 +514,21 @@ final class Darkroom {
             return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         }.value
     }
+}
+
+/// The sheets that can open over the camera.
+enum RecipeSheet: Identifiable {
+    case save
+    case library
+
+    var id: Self { self }
+}
+
+/// A failed import, as the library reports it.
+struct ImportAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 enum DarkroomError: LocalizedError {
