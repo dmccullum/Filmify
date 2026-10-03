@@ -53,8 +53,8 @@ final class Darkroom {
     /// The sheet over the camera, if any. It lives here so both recipe menus,
     /// and a recipe file being opened, can present it.
     var recipeSheet: RecipeSheet?
-    /// The last recipe imported, which the library scrolls to.
-    private(set) var lastImportedID: String?
+    /// The last recipe imported, which the library scrolls to once.
+    var lastImportedID: String?
     /// What went wrong importing recipe files, for the library to show.
     var importAlert: ImportAlert?
 

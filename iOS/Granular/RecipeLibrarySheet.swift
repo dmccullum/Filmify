@@ -39,6 +39,7 @@ struct RecipeLibrarySheet: View {
                 }
                 .onChange(of: darkroom.lastImportedID, initial: true) { _, id in
                     guard let id else { return }
+                    darkroom.lastImportedID = nil
                     withAnimation(.smooth) {
                         proxy.scrollTo(id, anchor: .center)
                         highlighted = id
@@ -101,7 +102,7 @@ struct RecipeLibrarySheet: View {
         }
         .presentationDetents([.large])
         .sensoryFeedback(.selection, trigger: darkroom.selectedRecipeID)
-        .sensoryFeedback(.success, trigger: darkroom.lastImportedID)
+        .sensoryFeedback(.success, trigger: darkroom.lastImportedID) { _, id in id != nil }
         .sensoryFeedback(.warning, trigger: darkroom.importAlert?.id)
     }
 
