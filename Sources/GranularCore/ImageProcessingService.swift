@@ -15,20 +15,29 @@ public actor ImageProcessingService {
     public func renderPreview(
         sourceURL: URL,
         recipe: FilmRecipe,
-        maximumDimension: CGFloat = 1_600
+        maximumDimension: CGFloat = 1_600,
+        grainDimension: CGFloat? = nil
     ) throws -> CGImage {
-        let source = try previewSource(for: sourceURL, maximumDimension: maximumDimension)
+        let (source, fullSize) = try previewSource(for: sourceURL, maximumDimension: maximumDimension)
         let rendered = try renderer.render(
-            source, recipe: recipe, previewMaximumDimension: maximumDimension
+            source,
+            recipe: recipe,
+            previewMaximumDimension: maximumDimension,
+            grainDimension: grainDimension,
+            fullSize: fullSize
         )
-        return try exporter.previewImage(for: rendered, maximumDimension: maximumDimension)
+        return try exporter.previewImage(
+            for: rendered, maximumDimension: max(maximumDimension, grainDimension ?? 0)
+        )
     }
 
     /// The open image decoded once at preview size. Every effect scales with
     /// the image's short edge, so rendering from it matches the full-size look.
     /// A couple of sizes are kept, so a quick preview while adjusting and a
     /// sharper one for a zoomed-in view don't decode the file in turn.
-    private func previewSource(for url: URL, maximumDimension: CGFloat) throws -> CIImage {
+    private func previewSource(
+        for url: URL, maximumDimension: CGFloat
+    ) throws -> (image: CIImage, fullSize: CGSize) {
         if previewSourceURL != url {
             previewSourceURL = url
             previewSources = []
@@ -36,7 +45,7 @@ public actor ImageProcessingService {
         if let index = previewSources.firstIndex(where: { $0.maximumDimension == maximumDimension }) {
             let cached = previewSources.remove(at: index)
             previewSources.append(cached)
-            return cached.image
+            return (cached.image, cached.fullSize)
         }
         let source = try renderer.loadImage(at: url)
         let scale = min(1, maximumDimension / max(source.extent.width, source.extent.height))
@@ -45,16 +54,16 @@ public actor ImageProcessingService {
                 .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             : source
         let image = try exporter.materialize(scaled)
-        previewSources.append((maximumDimension, image))
+        previewSources.append((maximumDimension, image, source.extent.integral.size))
         if previewSources.count > 2 {
             previewSources.removeFirst()
         }
-        return image
+        return (image, source.extent.integral.size)
     }
 
     private var previewSourceURL: URL?
     /// Least recently used first.
-    private var previewSources: [(maximumDimension: CGFloat, image: CIImage)] = []
+    private var previewSources: [(maximumDimension: CGFloat, image: CIImage, fullSize: CGSize)] = []
 
     /// Renders a small Film Tone preview of one stock for the stock picker. With
     /// no source image, a generated color swatch stands in.

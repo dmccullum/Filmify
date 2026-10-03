@@ -77,6 +77,23 @@ struct ParameterSlider: View {
 
     @State private var isTracking = false
     @State private var resetsOnRelease = false
+    @State private var reset = ResetWindow()
+
+    /// The slider can write its own value after a reset has put the recipe's
+    /// back, as the second tap lifts. Writes in this short window are stale.
+    private final class ResetWindow {
+        var ends = Date.distantPast
+        var isOpen: Bool { Date() < ends }
+    }
+
+    private var sliderValue: Binding<Double> {
+        Binding {
+            value
+        } set: { newValue in
+            guard !reset.isOpen else { return }
+            value = newValue
+        }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -86,14 +103,14 @@ struct ParameterSlider: View {
                 .frame(width: 80, alignment: .leading)
                 .accessibilityHidden(true)
 
-            Slider(value: $value, in: parameter.range) { editing in
+            Slider(value: sliderValue, in: parameter.range) { editing in
                 isTracking = editing
                 onEditing(editing)
                 // The slider sets its own value as the touch lifts, so a
                 // double-tap on it resets only after that.
                 if !editing, resetsOnRelease {
                     resetsOnRelease = false
-                    DispatchQueue.main.async { reset() }
+                    DispatchQueue.main.async { resetValue() }
                 }
             }
             .accessibilityLabel(parameter.title)
@@ -113,7 +130,7 @@ struct ParameterSlider: View {
         .contentShape(Rectangle())
         // Alongside the slider's own drag, so it reaches the track too.
         .simultaneousGesture(TapGesture(count: 2).onEnded {
-            if isTracking { resetsOnRelease = true } else { reset() }
+            if isTracking { resetsOnRelease = true } else { resetValue() }
         })
         // A light tap as the slider passes the recipe's own value.
         .sensoryFeedback(trigger: value) { old, new in
@@ -121,7 +138,8 @@ struct ParameterSlider: View {
         }
     }
 
-    private func reset() {
+    private func resetValue() {
+        reset.ends = Date().addingTimeInterval(0.35)
         withAnimation(.smooth) { value = recipeValue }
     }
 }

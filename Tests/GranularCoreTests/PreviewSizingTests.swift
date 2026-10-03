@@ -22,3 +22,12 @@ import Testing
     // Nothing rendered yet is a first render's job, not a sharper one's.
     #expect(!PreviewSizing.needsSharperRender(rendered: 0, wanted: 2_048))
 }
+
+@Test func exactPreviewSizeFollowsTheDisplayedSizeBothWays() {
+    #expect(PreviewSizing.renderDimension(displayedLongEdge: 1_803.4, sourceLongEdge: 6_000, exact: true) == 1_803)
+    #expect(PreviewSizing.renderDimension(displayedLongEdge: 12_000, sourceLongEdge: 6_000, exact: true) == 6_000)
+    #expect(PreviewSizing.needsSharperRender(rendered: 2_048, wanted: 1_803, exact: true))
+    #expect(PreviewSizing.needsSharperRender(rendered: 1_024, wanted: 1_803, exact: true))
+    #expect(!PreviewSizing.needsSharperRender(rendered: 1_803, wanted: 1_803, exact: true))
+    #expect(!PreviewSizing.needsSharperRender(rendered: 2_048, wanted: 1_803))
+}

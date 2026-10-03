@@ -184,6 +184,7 @@ final class AppModel {
     /// The long edge, in screen pixels, the viewer shows the image at. Previews
     /// render no larger than they’re seen.
     @ObservationIgnored var previewDisplayDimension: CGFloat = AppModel.interactivePreviewDimension
+    @ObservationIgnored var previewDisplayedLongEdge: CGFloat = AppModel.interactivePreviewDimension
     /// The size the preview on screen was rendered at.
     @ObservationIgnored var renderedPreviewDimension: CGFloat = 0
     @ObservationIgnored var previewRefinementTask: Task<Void, Never>?

@@ -108,7 +108,9 @@ public final class FilmRenderer: @unchecked Sendable {
     public func render(
         _ source: CIImage,
         recipe: FilmRecipe,
-        previewMaximumDimension: CGFloat? = nil
+        previewMaximumDimension: CGFloat? = nil,
+        grainDimension: CGFloat? = nil,
+        fullSize: CGSize? = nil
     ) throws -> CIImage {
         var extent = source.extent.integral
         guard !extent.isEmpty else { throw FilmRendererError.renderFailed }
@@ -140,6 +142,31 @@ public final class FilmRenderer: @unchecked Sendable {
             }
         }
         if recipe.grain.isEnabled, recipe.grain.amount != 0 {
+            if let fullSize, fullSize.width > 0, fullSize.height > 0,
+               fullSize.width > extent.width || fullSize.height > extent.height {
+                // What you see is what you get: grain is made on the photo's
+                // own pixels, exactly as in the developed file, then shrunk
+                // to the preview the way any viewer shrinks the file.
+                let target = grainDimension ?? max(extent.width, extent.height)
+                return try applyGrainOnFullGrid(
+                    image,
+                    settings: recipe.grain,
+                    extent: extent,
+                    fullSize: fullSize,
+                    outputLongEdge: min(target, max(fullSize.width, fullSize.height))
+                )
+            }
+            // A quick preview resolves everything else small, but grain is
+            // generated on the grid it will be shown at; stretching it up from
+            // the small grid would make it blocky.
+            if let grainDimension, grainDimension > 0 {
+                let scale = grainDimension / max(extent.width, extent.height)
+                if scale > 1 {
+                    image = image.samplingLinear()
+                        .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                    extent = image.extent.integral
+                }
+            }
             image = try applyGrain(image, settings: recipe.grain, extent: extent)
         }
 
@@ -503,9 +530,10 @@ public final class FilmRenderer: @unchecked Sendable {
         settings: GrainSettings,
         extent: CGRect
     ) throws -> CIImage {
+        // Treat the long edge as the 36 mm film dimension in either orientation.
         let particlePixels = max(
             0.20,
-            min(10, extent.width * settings.grainSize / 36_000)
+            min(10, max(extent.width, extent.height) * settings.grainSize / 36_000)
         )
         // Film granularity follows the density of a small surrounding area, not the
         // brightness of each finished pixel in isolation. A softly resolved guide
@@ -531,6 +559,82 @@ public final class FilmRenderer: @unchecked Sendable {
             throw FilmRendererError.renderFailed
         }
         return output
+    }
+
+    /// Grain for a preview that matches the developed file at any size: the
+    /// small picture is stretched onto the photo's full grid, grained there
+    /// with the same pixels and settings as an export, then averaged back down.
+    private func applyGrainOnFullGrid(
+        _ image: CIImage,
+        settings: GrainSettings,
+        extent: CGRect,
+        fullSize: CGSize,
+        outputLongEdge: CGFloat
+    ) throws -> CIImage {
+        let fullExtent = CGRect(origin: .zero, size: CGSize(
+            width: fullSize.width.rounded(), height: fullSize.height.rounded()
+        ))
+        let scaleX = fullExtent.width / extent.width
+        let scaleY = fullExtent.height / extent.height
+        let upscale = CGAffineTransform(scaleX: scaleX, y: scaleY)
+
+        let particlePixels = max(
+            0.20,
+            min(10, max(fullExtent.width, fullExtent.height) * settings.grainSize / 36_000)
+        )
+        let shortEdge = min(fullExtent.width, fullExtent.height)
+        let fullRadius = max(2, min(16, max(particlePixels * 2.25, shortEdge * 0.0015)))
+        // The density guide is soft, so it's blurred on the small picture.
+        let guide = gaussianBlur(image, radius: fullRadius / max(scaleX, scaleY), extent: extent)
+
+        func onFullGrid(_ small: CIImage) -> CIImage {
+            small.clampedToExtent().samplingLinear()
+                .transformed(by: upscale)
+                .cropped(to: fullExtent)
+        }
+
+        let arguments: [Any] = [
+            onFullGrid(image),
+            onFullGrid(guide),
+            CIVector(cgRect: fullExtent),
+            Float(Self.mappedGrainAmount(settings.amount)),
+            Float(particlePixels),
+            Float(settings.acutance),
+            Float(settings.sizeVariation),
+            Float(settings.chroma),
+            Float(settings.shadowResponse),
+            Float(settings.highlightResponse),
+            Self.mappedGrainSeed(settings.seed)
+        ]
+        guard let grained = grainKernel.apply(extent: fullExtent, arguments: arguments) else {
+            throw FilmRendererError.renderFailed
+        }
+        return Self.areaScaled(
+            grained,
+            from: fullExtent,
+            toLongEdge: outputLongEdge
+        )
+    }
+
+    /// Shrinks by halving, which averages exactly, then a last partial step.
+    /// Dropping straight to a small size would alias fine grain.
+    static func areaScaled(_ image: CIImage, from extent: CGRect, toLongEdge longEdge: CGFloat) -> CIImage {
+        let factor = longEdge / max(extent.width, extent.height)
+        guard factor < 1 else { return image }
+        let width = max(1, (extent.width * factor).rounded())
+        let height = max(1, (extent.height * factor).rounded())
+        var result = image
+        var current = extent.size
+        while current.width / 2 >= width, current.height / 2 >= height {
+            result = result.samplingLinear().transformed(by: CGAffineTransform(scaleX: 0.5, y: 0.5))
+            current = CGSize(width: current.width / 2, height: current.height / 2)
+        }
+        if current.width != width || current.height != height {
+            result = result.samplingLinear().transformed(by: CGAffineTransform(
+                scaleX: width / current.width, y: height / current.height
+            ))
+        }
+        return result.cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
     }
 
     static func mappedGrainAmount(_ amount: Double) -> Double {
@@ -1277,28 +1381,34 @@ private extension FilmRenderer {
         );
         float densityNoise = mix(primary, varied, variationMix) * variationNormalization;
 
-        float localLuminance = clamp(
-            dot(max(densityGuide.rgb, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722)),
+        vec4 straightSource = unpremultiply(source);
+        vec4 straightGuide = unpremultiply(densityGuide);
+        // The renderer works in linear Rec. 2020. Shape visibility in perceptual
+        // tones so the shadow peak actually lands in visible darker midtones.
+        float linearLuminance = clamp(
+            dot(max(straightGuide.rgb, vec3(0.0)), vec3(0.2627, 0.6780, 0.0593)),
             0.0,
             1.0
         );
+        float localLuminance = linearLuminance <= 0.0031308
+            ? linearLuminance * 12.92
+            : 1.055 * pow(linearLuminance, 1.0 / 2.4) - 0.055;
         float shadowWeight = pow(1.0 - localLuminance, 0.72);
         float endpointResponse = mix(highlightResponse, shadowResponse, shadowWeight);
 
-        // A developed negative does not become progressively noisier all the way to
-        // display black. Granularity is most legible through the useful density range,
-        // then compresses through both the toe and shoulder. Keep a small residual at
-        // either end so the image never turns unnaturally clean.
-        float toeTransition = smoothstep(0.015, 0.16, localLuminance);
-        float toeCompression = mix(0.38, 1.0, toeTransition);
-        float shoulderTransition = smoothstep(0.68, 1.0, localLuminance);
-        float shoulderCompression = mix(1.0, 0.42, shoulderTransition);
-        float midtoneOccupancy = pow(max(0.0, 4.0 * localLuminance * (1.0 - localLuminance)), 0.65);
-        float densityStructure = mix(0.82, 1.10, midtoneOccupancy);
-        float tonalResponse = endpointResponse * toeCompression * shoulderCompression * densityStructure;
+        // A broad darker-midtone peak, with a quiet toe and an earlier shoulder,
+        // avoids both noisy blocked blacks and conspicuous grain in bright skies.
+        // This is a perceptual film-look model, not a stock-specific simulation.
+        float toeTransition = smoothstep(0.04, 0.40, localLuminance);
+        float toeCompression = mix(0.18, 1.0, toeTransition);
+        float shoulderTransition = smoothstep(0.50, 1.0, localLuminance);
+        float shoulderCompression = mix(1.0, 0.18, shoulderTransition);
+        float tonalResponse = endpointResponse * toeCompression * shoulderCompression * 1.4;
         float sigma = amount * tonalResponse * 0.34;
         float densityDelta = densityNoise * sigma;
-        float densityCompensation = 0.10 * sigma * sigma;
+        // Cancel the mean lift from exponentiating zero-mean density noise. The
+        // normalized field variance is 0.05449: 0.5 * ln(10) * variance.
+        float densityCompensation = 0.06273 * sigma * sigma;
         float luminanceScale = exp2(-(densityDelta + densityCompensation) * 3.321928);
 
         vec3 chromaNoise = vec3(
@@ -1314,13 +1424,13 @@ private extension FilmRenderer {
         // shadows or nearly white highlights. Let their small differences live mostly
         // in the printable density range while the shared silver-density texture
         // continues softly into the extremes.
-        float dyeToe = smoothstep(0.055, 0.24, localLuminance);
+        float dyeToe = smoothstep(0.15, 0.48, localLuminance);
         float dyeShoulder = 1.0 - smoothstep(0.70, 0.97, localLuminance);
         float dyeCloudResponse = mix(0.16, 1.0, dyeToe * dyeShoulder);
         float chromaStrength = amount * clamp(chroma, 0.0, 1.0) * tonalResponse * dyeCloudResponse * 0.50;
         vec3 colorScale = max(vec3(0.05), vec3(1.0) + chromaNoise * chromaStrength);
-        vec3 rgb = max(vec3(0.0), source.rgb * luminanceScale * colorScale);
-        return vec4(rgb, source.a);
+        vec3 rgb = max(vec3(0.0), straightSource.rgb * luminanceScale * colorScale);
+        return premultiply(vec4(rgb, straightSource.a));
     }
     """#
 }

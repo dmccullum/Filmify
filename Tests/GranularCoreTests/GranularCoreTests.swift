@@ -498,10 +498,12 @@ import Testing
         return luminanceCoefficientOfVariation(pixels)
     }
 
-    let deepShadow = try relativeGrain(at: 0.02)
+    let deepShadow = try relativeGrain(at: 0.002)
+    let darkerMidtone = try relativeGrain(at: 0.18)
     let middleDensity = try relativeGrain(at: 0.45)
     let brightHighlight = try relativeGrain(at: 0.95)
 
+    #expect(darkerMidtone > middleDensity * 1.4)
     #expect(middleDensity > deepShadow * 1.5)
     #expect(middleDensity > brightHighlight * 2)
 }
@@ -568,6 +570,43 @@ import Testing
         #expect(native.max()! / native.min()! < 1.2)
         #expect(fitted.max()! / fitted.min()! < 1.2)
     }
+}
+
+@Test func grainPreservesAverageBrightnessAndTransparentTexture() throws {
+    let renderer = try FilmRenderer()
+    let extent = CGRect(x: 0, y: 0, width: 256, height: 256)
+    for amount in [0.25, 0.5, 1.0] {
+        var recipe = grainTestRecipe(chroma: 0)
+        recipe.grain.amount = amount
+        let opaque = CIImage(color: .init(red: 0.18, green: 0.18, blue: 0.18, alpha: 1))
+            .cropped(to: extent)
+        let translucent = CIImage(color: .init(red: 0.18, green: 0.18, blue: 0.18, alpha: 0.5))
+            .cropped(to: extent)
+        let opaquePixels = renderFloatPixels(try renderer.render(opaque, recipe: recipe), extent: extent)
+        let translucentPixels = renderFloatPixels(
+            try renderer.render(translucent, recipe: recipe), extent: extent
+        )
+        #expect(abs(meanLuminance(opaquePixels) - 0.18) < 0.003)
+        // Opacity must not move a tone into a different grain regime.
+        #expect(meanAbsoluteLuminanceDifference(opaquePixels, translucentPixels.map { $0 * 2 }) < 0.000_1)
+        #expect(stride(from: 3, to: translucentPixels.count, by: 4).allSatisfy {
+            abs(translucentPixels[$0] - 0.5) < 0.000_01
+        })
+    }
+}
+
+@Test func grainScaleDoesNotChangeWithImageOrientation() throws {
+    let renderer = try FilmRenderer()
+    let sample = CGRect(x: 0, y: 0, width: 192, height: 192)
+    let recipe = grainTestRecipe(chroma: 0)
+    func pixels(width: Int, height: Int) throws -> [Float] {
+        let source = CIImage(color: .init(red: 0.42, green: 0.42, blue: 0.42, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
+        return renderFloatPixels(try renderer.render(source, recipe: recipe), extent: sample)
+    }
+    let landscape = try pixels(width: 1800, height: 1200)
+    let portrait = try pixels(width: 1200, height: 1800)
+    #expect(meanAbsoluteLuminanceDifference(landscape, portrait) < 0.000_01)
 }
 
 @Test func fullRangeSavedGrainSeedsRetainTextureWithoutChangingMeanDensity() throws {
@@ -1359,4 +1398,53 @@ private func oklab(_ rgb: [Float]) -> [Float] {
 
 private func labDistance(_ lhs: [Float], _ rhs: [Float]) -> Float {
     sqrt(zip(lhs, rhs).map { ($0 - $1) * ($0 - $1) }.reduce(0, +))
+}
+
+@Test func grainDimensionGeneratesGrainOnTheLargerDisplayGrid() throws {
+    let renderer = try FilmRenderer()
+    let recipe = grainTestRecipe(chroma: 0)
+    let source = CIImage(color: .init(red: 0.42, green: 0.42, blue: 0.42, alpha: 1))
+        .cropped(to: CGRect(x: 0, y: 0, width: 256, height: 128))
+    let small = try renderer.render(source, recipe: recipe, previewMaximumDimension: 256)
+    let large = try renderer.render(
+        source, recipe: recipe, previewMaximumDimension: 256, grainDimension: 512
+    )
+    #expect(small.extent.width == 256)
+    #expect(large.extent.width == 512)
+    #expect(large.extent.height == 256)
+}
+
+@Test func grainPreviewMatchesTheDevelopedFileAtAnyZoom() throws {
+    let renderer = try FilmRenderer()
+    var recipe = FilmRecipe.classic35
+    recipe.grain.isEnabled = true
+    recipe.grain.amount = 1
+    let fullWidth: CGFloat = 2400
+    let fullHeight: CGFloat = 1800
+    let full = CIImage(color: .init(red: 0.3, green: 0.3, blue: 0.3, alpha: 1))
+        .cropped(to: CGRect(x: 0, y: 0, width: fullWidth, height: fullHeight))
+    let developed = try renderer.render(full, recipe: recipe)
+    for display in [300.0, 800.0, 1500.0] {
+        let small = CIImage(color: .init(red: 0.3, green: 0.3, blue: 0.3, alpha: 1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 600, height: 450))
+        let preview = try renderer.render(
+            small,
+            recipe: recipe,
+            previewMaximumDimension: 600,
+            grainDimension: display,
+            fullSize: CGSize(width: fullWidth, height: fullHeight)
+        )
+        let expected = FilmRenderer.areaScaled(
+            developed, from: developed.extent, toLongEdge: display
+        )
+        let sample = CGRect(x: 20, y: 20, width: 200, height: 150)
+        let previewPixels = renderFloatPixels(preview, extent: sample)
+        let expectedPixels = renderFloatPixels(expected, extent: sample)
+        #expect(abs(preview.extent.width - display) < 0.5)
+        #expect(
+            abs(luminanceCoefficientOfVariation(previewPixels)
+                - luminanceCoefficientOfVariation(expectedPixels)) < 0.002
+        )
+        #expect(meanAbsoluteLuminanceDifference(previewPixels, expectedPixels) < 0.002)
+    }
 }
