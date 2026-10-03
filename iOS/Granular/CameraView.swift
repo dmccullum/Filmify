@@ -51,6 +51,12 @@ struct CameraView: View {
         .onChange(of: mode, initial: true) { _, mode in
             if mode == .edit { hasEdited = true }
         }
+        .sheet(item: Binding { darkroom.recipeSheet } set: { darkroom.recipeSheet = $0 }) { sheet in
+            switch sheet {
+            case .save: SaveRecipeSheet()
+            case .library: RecipeLibrarySheet()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { darkroom.persistRecipe() }
         }

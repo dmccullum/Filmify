@@ -15,10 +15,23 @@ struct RecipeMenu<Label: View>: View {
                     withAnimation(.smooth) { darkroom.revertRecipe() }
                 }
             }
+            Section {
+                if darkroom.canUpdateSelectedRecipe {
+                    Button("Update “\(darkroom.currentRecipe.name)”", systemImage: "arrow.triangle.2.circlepath") {
+                        withAnimation(.smooth) { darkroom.updateSelectedRecipe() }
+                    }
+                }
+                Button("Save as Recipe…", systemImage: "plus") {
+                    darkroom.recipeSheet = .save
+                }
+            }
             Picker("Recipe", selection: selection) {
                 ForEach(darkroom.availableRecipes) { recipe in
                     Text(recipe.name).tag(recipe.id)
                 }
+            }
+            Button("Recipes…", systemImage: "square.stack") {
+                darkroom.recipeSheet = .library
             }
         } label: {
             label()

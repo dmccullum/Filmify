@@ -1,4 +1,5 @@
 import CoreText
+import GranularCore
 import SwiftUI
 
 @main
@@ -21,6 +22,11 @@ struct GranularApp: App {
             CameraView()
                 .environment(darkroom)
                 .environment(editor)
+                .onOpenURL { url in
+                    guard RecipeFile.isRecipeFile(url) else { return }
+                    darkroom.importRecipes(from: [url])
+                    darkroom.recipeSheet = .library
+                }
         }
     }
 }
