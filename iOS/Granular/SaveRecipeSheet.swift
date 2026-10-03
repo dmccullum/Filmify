@@ -32,6 +32,8 @@ struct SaveRecipeSheet: View {
                     .font(.title3.weight(.semibold))
                     .multilineTextAlignment(.center)
                     .submitLabel(.done)
+                    // Recipe names are made up; correcting them only gets in the way.
+                    .autocorrectionDisabled()
                     .focused($isNaming)
                     .onSubmit(save)
                     .padding(.horizontal, 16)

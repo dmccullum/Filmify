@@ -83,6 +83,7 @@ struct RecipeLibrarySheet: View {
             }
             .alert("Rename Recipe", isPresented: Binding { renaming != nil } set: { if !$0 { renaming = nil } }) {
                 TextField("Name", text: $newName)
+                    .autocorrectionDisabled()
                 Button("Cancel", role: .cancel) {}
                 Button("Rename") {
                     if let renaming { withAnimation(.smooth) { _ = darkroom.renameRecipe(id: renaming.id, to: newName) } }
@@ -155,7 +156,7 @@ struct RecipeLibrarySheet: View {
                 withAnimation(.smooth) { _ = darkroom.duplicateRecipe(id: recipe.id) }
             }
             if isSaved {
-                Picker("Canister", selection: canister(for: recipe)) {
+                Picker("Canister", systemImage: "cylinder", selection: canister(for: recipe)) {
                     ForEach(CanisterDesign.library) { design in
                         Text(design.name).tag(design.id)
                     }
