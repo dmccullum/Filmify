@@ -41,7 +41,6 @@ The promise is not “a lot of effects.” It is: **four closely related effects
 - Video, Live Photos, animated images, or image sequences.
 - Claims that named stock simulations are manufacturer profiles or exact substitutes for a complete capture, development, scan, and print workflow. Stock names are descriptive and disclaimed as such.
 - RAW development. A RAW file needs interpretive demosaicing and camera-specific controls, which would quietly turn Granular into a RAW editor. Add it later only as an explicit workflow.
-- Full HDR/gain-map output. Version 1 should detect HDR or gain-map input and offer a clearly labeled SDR conversion instead of silently invalidating HDR metadata.
 - A privileged daemon. Watching operates while Granular is running; Launch at Login is the transparent way to make it persistent.
 
 ## The interaction model
@@ -300,7 +299,7 @@ Normal inspector controls are Amount and Bloom. Advanced controls are Detail Sof
 
 ### Halation
 
-Halation is modeled as energy-conserving, channel-selective diffusion within the film layers rather than a thresholded red glow:
+Halation uses a normalized, channel-selective RGB approximation of film-layer scattering. For opaque images away from the frame boundary, it preserves channel energy:
 
 ```text
 O[c] = (1 - s[c]) · I[c] + s[c] · (K[c] * I[c])
@@ -308,10 +307,14 @@ O[c] = (1 - s[c]) · I[c] + s[c] · (K[c] * I[c])
 
 - Each `K[c]` is a normalized, long-tailed point-spread function. A weighted mixture of several separable Gaussian scales can efficiently approximate a radial exponential/diffusion tail.
 - Scattering strength and radius are strongest in the red record, weaker in green, and normally negligible in blue.
+- Red uses a three-scale tail; green uses a more compact two-scale mixture. Radii remain image-relative even below one pixel, so a minimum pixel radius does not broaden small previews.
 - Uniform fields remain unchanged. Bright, sharp boundaries reveal the halo naturally because they contribute much more scene-linear energy; no Sobel edge detector or hard highlight threshold is needed.
+- Transparent image coverage is preserved by normalizing each blurred record by its filtered alpha and repremultiplying with the original alpha.
 - A recipe may add a very soft exposure-response curve to represent a particular film structure, but it must not create a keyed outline or tint the core of every highlight.
 
 Radius is stored relative to the virtual film gate and output dimensions, not as an arbitrary export-pixel count. The normal UI exposes Amount and Spill Radius; Advanced adds Tail, Color Shift, Saturation, and Green Leakage.
+
+The current implementation scales against the image's short edge; it does not yet have measured film-gate or stock-specific spectral calibration. Film Tone still precedes halation, so this is an approximation applied to graded linear RGB, not a complete acquisition and development model. See [the halation accuracy review](HALATION_REVIEW.md) for physical references, normalization assumptions, validation, and remaining limitations.
 
 ### Landscape glow
 
@@ -331,8 +334,8 @@ Store vignette falloff in stops; defaults stay between roughly 0.10 and 0.30 sto
 
 | Format | Version 1 behavior |
 |---|---|
-| JPEG | Decode to float; export JPEG at configurable quality, default 0.94 |
-| HEIC | Decode to float; export HEIC; detect gain maps/HDR and route to the SDR warning flow |
+| JPEG | Decode to float; export JPEG at configurable quality, default 0.94; keep HDR as a fresh ISO gain map |
+| HEIC | Decode to float; export HEIC; keep HDR as a fresh ISO gain map |
 | PNG | Preserve alpha and export PNG; apply effects only to represented image content |
 | TIFF | Preserve 8/16-bit intent where possible; preferred lossless archival output |
 | RAW/DNG | Explain that RAW is not supported yet; never silently use an arbitrary camera rendering |
@@ -593,7 +596,7 @@ A later milestone may add ProRes, alpha, HDR and wide-color preservation, variab
 | Default instant output | One user-selected destination, suffixed, never overwrite | Preserves immediate repeat behavior without pretending a file drag grants parent-folder access |
 | Default recipe | Classic 35 | A useful middle ground between Clean 120 and Soft 16 |
 | RAW | Not in version 1 | Avoid accidental RAW-editor scope and inconsistent camera rendering |
-| HDR | Explicit SDR conversion in version 1 | Altered pixels invalidate existing gain maps; silent stripping is unacceptable |
+| HDR | HEIC and JPEG keep HDR with a newly calculated gain map; see [the HDR pipeline](HDR_PIPELINE.md) | Altered pixels invalidate the source's gain map, so the edited SDR and HDR renditions produce a new one |
 | Stock names | Descriptive, disclosed as generated or fitted simulations, with a trademark disclaimer | Keeps the product honest while giving users familiar handles |
 | Color stocks | 18 stocks: 15 fitted characters plus 3 cinema cubes | Fitted looks track reference renderings; cinema stocks have no references, so they keep their spectral cubes. Stocks with neither were dropped |
 | Network | None | Privacy, speed, reliability, and a crisp single-purpose product |

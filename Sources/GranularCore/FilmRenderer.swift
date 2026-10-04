@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreImage
 import Foundation
+import ImageIO
 
 public enum FilmRendererError: LocalizedError {
     case kernelCompilationFailed(String)
@@ -38,10 +39,15 @@ public final class FilmRenderer: @unchecked Sendable {
     private let landscapeGlowExtractionKernel: CIColorKernel
     private let landscapeGlowKernel: CIColorKernel
     private let grainKernel: CIColorKernel
+    private let hdrToneKernel: CIColorKernel
     private let stockCubeLock = NSLock()
     private var stockCubes: [FilmStockID: FilmStockCube] = [:]
 
     public init() throws {
+        guard let hdrToneKernel = CIColorKernel(source: Self.hdrToneSource) else {
+            throw FilmRendererError.kernelCompilationFailed("HDR film-tone")
+        }
+        self.hdrToneKernel = hdrToneKernel
         guard let toneKernel = CIColorKernel(source: Self.toneSource) else {
             throw FilmRendererError.kernelCompilationFailed("film-tone")
         }
@@ -95,9 +101,12 @@ public final class FilmRenderer: @unchecked Sendable {
         self.grainKernel = grainKernel
     }
 
-    public func loadImage(at url: URL) throws -> CIImage {
+    /// Loads the photo's SDR rendition, or with `expandToHDR` its HDR one.
+    public func loadImage(at url: URL, expandToHDR: Bool = false) throws -> CIImage {
+        if expandToHDR { return try loadHDRImage(at: url) }
         let options: [CIImageOption: Any] = [
-            .applyOrientationProperty: true
+            .applyOrientationProperty: true,
+            .toneMapHDRtoSDR: true
         ]
         guard let image = CIImage(contentsOf: url, options: options) else {
             throw FilmRendererError.imageLoadFailed(url)
@@ -105,8 +114,29 @@ public final class FilmRenderer: @unchecked Sendable {
         return image
     }
 
+    /// Core Image's own decoding sometimes hands back the tone-mapped SDR
+    /// rendition of a PQ or HLG photo when asked for HDR, depending on what
+    /// decoded the file before. ImageIO's explicit decode request doesn't.
+    private func loadHDRImage(at url: URL) throws -> CIImage {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, [
+                  kCGImageSourceDecodeRequest: kCGImageSourceDecodeToHDR,
+                  kCGImageSourceShouldAllowFloat: true,
+                  kCGImageSourceShouldCache: false
+              ] as CFDictionary) else {
+            throw FilmRendererError.imageLoadFailed(url)
+        }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let orientation = properties?[kCGImagePropertyOrientation] as? Int32 ?? 1
+        // The image carries the headroom ImageIO decoded it with.
+        return CIImage(cgImage: image).oriented(forExifOrientation: orientation)
+    }
+
+    /// Renders `source`, the photo's SDR rendition. Given `hdr`, the same photo's
+    /// HDR rendition, it renders the HDR rendition of the edit instead.
     public func render(
         _ source: CIImage,
+        hdr: CIImage? = nil,
         recipe: FilmRecipe,
         previewMaximumDimension: CGFloat? = nil,
         grainDimension: CGFloat? = nil,
@@ -115,7 +145,7 @@ public final class FilmRenderer: @unchecked Sendable {
         var extent = source.extent.integral
         guard !extent.isEmpty else { throw FilmRendererError.renderFailed }
 
-        var image = try renderFilmTone(source, tone: recipe.tone)
+        var image = try renderFilmTone(source, tone: recipe.tone, hdr: hdr)
 
         if recipe.lightShaping.isEnabled, recipe.lightShaping.amountStops != 0 {
             image = try applyLightShaping(image, settings: recipe.lightShaping, extent: extent)
@@ -130,7 +160,8 @@ public final class FilmRenderer: @unchecked Sendable {
             image = try applyHalation(image, settings: recipe.halation, extent: extent)
         }
         if recipe.landscapeGlow.isEnabled, recipe.landscapeGlow.amount != 0 {
-            image = try applyLandscapeGlow(image, settings: recipe.landscapeGlow, extent: extent)
+            image = try applyLandscapeGlow(image, settings: recipe.landscapeGlow, extent: extent,
+                                           preserveHDR: hdr != nil)
         }
         // Resolve optical effects at source resolution, then generate grain on
         // the final preview grid so downsampling does not dilute its contrast.
@@ -174,19 +205,54 @@ public final class FilmRenderer: @unchecked Sendable {
     }
 
     /// Applies only the Film Tone stage: tone adjustments, then the color stock.
-    public func renderFilmTone(_ source: CIImage, tone: FilmToneSettings) throws -> CIImage {
+    /// Given `hdr`, the HDR rendition of `source`, it returns the stage's HDR rendition.
+    public func renderFilmTone(
+        _ source: CIImage, tone: FilmToneSettings, hdr: CIImage? = nil
+    ) throws -> CIImage {
         let extent = source.extent.integral
-        guard tone.isEnabled, !extent.isEmpty else { return source }
+        let appliesStock = tone.stock != .none && tone.stockAmount > 0
+        guard tone.isEnabled, !extent.isEmpty, tone.hasToneAdjustments || appliesStock else {
+            return hdr ?? source
+        }
 
         var image = source
         if tone.hasToneAdjustments {
             image = try applyTone(image, settings: tone, extent: extent)
         }
-        if tone.stock != .none, tone.stockAmount > 0 {
+        if appliesStock {
             image = try applyFilmStock(image, settings: tone, extent: extent)
         }
-        return image
+        guard let hdr else { return image }
+        // The graded SDR image, brightened as much as the photo's HDR rendition is
+        // brighter than its SDR one. Exposure acts on that extra light; stock
+        // strength gently rolls it off.
+        let stockAmount = appliesStock ? max(0, min(2, tone.stockAmount)) : 0
+        guard let output = hdrToneKernel.apply(extent: extent, arguments: [
+            source, hdr, image, Float(max(-2, min(2, tone.exposure))),
+            Float(1 / (1 + 0.15 * stockAmount))
+        ]) else { throw FilmRendererError.renderFailed }
+        return output
     }
+
+    // Grading the SDR rendition and carrying over the photo's own HDR-to-SDR
+    // brightness ratio keeps both renditions identical wherever the photo's are,
+    // and keeps the tone response smooth through reference white: the SDR curve's
+    // fixed white point never meets an HDR value. One luminance ratio for all
+    // channels keeps the stock's hue. Kernels use straight RGB.
+    static let hdrToneSource = #"""
+    kernel vec4 hdrTone(__sample sdr, __sample hdr, __sample graded, float exposure, float shoulder) {
+        const vec3 luma = vec3(0.2627002, 0.6779981, 0.0593017);
+        vec4 look = unpremultiply(graded);
+        float sdrY = max(dot(unpremultiply(sdr).rgb, luma), 0.0);
+        float hdrY = max(dot(unpremultiply(hdr).rgb, luma), 0.0);
+        // The offset keeps ratios near black, where both renditions are mostly
+        // noise and encoding offsets, close to 1.
+        float ratio = (hdrY + 0.015625) / (sdrY + 0.015625);
+        float extra = pow(max(ratio, 1.0), shoulder) - 1.0;
+        float gain = min(ratio, 1.0) * (1.0 + extra * exp2(exposure));
+        return premultiply(vec4(max(look.rgb, vec3(0.0)) * gain, look.a));
+    }
+    """#
 
     private func applyTone(
         _ image: CIImage,
@@ -438,24 +504,32 @@ public final class FilmRenderer: @unchecked Sendable {
         extent: CGRect
     ) throws -> CIImage {
         let shortEdge = min(extent.width, extent.height)
-        let baseRadius = max(0.75, shortEdge * (0.00045 + 0.0022 * settings.spillRadius))
-        let middleRadius = baseRadius * (2.0 + settings.tail)
-        let farRadius = baseRadius * (4.0 + settings.tail * 5.0)
+        let spillRadius = max(0, min(1, settings.spillRadius))
+        let tail = max(0, min(1, settings.tail))
+        // Keep every scale relative to the image, including subpixel radii.
+        // A pixel-sized floor makes quick previews halate more than exports.
+        let baseRadius = shortEdge * (0.00045 + 0.0022 * spillRadius)
+        let middleRadius = baseRadius * (2.0 + tail)
+        let farRadius = baseRadius * (4.0 + tail * 5.0)
 
         let near = gaussianBlur(image, radius: baseRadius, extent: extent)
         let middle = gaussianBlur(image, radius: middleRadius, extent: extent)
         let far = gaussianBlur(image, radius: farRadius, extent: extent)
+        // A compact green record gives an amber inner halo and a red outer
+        // tail. These are RGB approximations, not measured emulsion spectra.
+        let greenNear = gaussianBlur(image, radius: baseRadius * 0.55, extent: extent)
 
         let arguments: [Any] = [
             image,
             near,
             middle,
             far,
+            greenNear,
             Float(amount),
-            Float(settings.tail),
-            Float(settings.colorShift),
-            Float(settings.saturation),
-            Float(settings.greenLeakage)
+            Float(tail),
+            Float(max(0, min(1, settings.colorShift))),
+            Float(max(0, min(1, settings.saturation))),
+            Float(max(0, min(0.5, settings.greenLeakage)))
         ]
         guard let output = halationKernel.apply(extent: extent, arguments: arguments) else {
             throw FilmRendererError.renderFailed
@@ -466,7 +540,8 @@ public final class FilmRenderer: @unchecked Sendable {
     private func applyLandscapeGlow(
         _ image: CIImage,
         settings: LandscapeGlowSettings,
-        extent: CGRect
+        extent: CGRect,
+        preserveHDR: Bool
     ) throws -> CIImage {
         let shortEdge = min(extent.width, extent.height)
         let size = max(0, min(1, settings.glowSize))
@@ -492,7 +567,8 @@ public final class FilmRenderer: @unchecked Sendable {
             wide,
             Float(max(0, min(LandscapeGlowSettings.maximumAmount, settings.amount))),
             Float(max(0, min(1, settings.shadowProtection))),
-            Float(max(0, min(1, settings.detail)))
+            Float(max(0, min(1, settings.detail))),
+            Float(preserveHDR ? 1 : 0)
         ]
         guard let output = landscapeGlowKernel.apply(extent: extent, arguments: arguments) else {
             throw FilmRendererError.renderFailed
@@ -1161,18 +1237,29 @@ private extension FilmRenderer {
     """#
 
     static let halationSource = #"""
-    kernel vec4 halate(__sample source, __sample nearBlur, __sample middleBlur, __sample farBlur, float amount, float tail, float colorShift, float saturation, float greenLeakage) {
+    vec3 halationUnpremultiply(vec4 sample) {
+        return sample.a > 0.000001 ? sample.rgb / sample.a : vec3(0.0);
+    }
+
+    kernel vec4 halate(__sample source, __sample nearBlur, __sample middleBlur, __sample farBlur, __sample greenNearBlur, float amount, float tail, float colorShift, float saturation, float greenLeakage) {
+        vec3 sourceRGB = halationUnpremultiply(source);
         float farWeight = mix(0.08, 0.26, clamp(tail, 0.0, 1.0));
         float middleWeight = 0.32;
         float nearWeight = 1.0 - middleWeight - farWeight;
-        vec3 scattered = nearBlur.rgb * nearWeight + middleBlur.rgb * middleWeight + farBlur.rgb * farWeight;
+        // Normalize each PSF, then divide by its filtered coverage. Transparent
+        // pixels are missing image coverage, not black film exposure. For opaque
+        // photographs this reduces to an energy-preserving linear convolution.
+        vec4 redBlur = nearBlur * nearWeight + middleBlur * middleWeight + farBlur * farWeight;
+        vec4 greenBlur = greenNearBlur * 0.8 + nearBlur * 0.2;
+        vec3 redScattered = halationUnpremultiply(redBlur);
+        vec3 greenScattered = halationUnpremultiply(greenBlur);
         float redScatter = clamp(amount * mix(0.55, 0.92, saturation), 0.0, 0.85);
         float greenScatter = clamp(amount * greenLeakage * mix(0.8, 0.35, saturation) * mix(1.2, 0.75, colorShift), 0.0, 0.35);
         vec3 rgb;
-        rgb.r = mix(source.r, scattered.r, redScatter);
-        rgb.g = mix(source.g, scattered.g, greenScatter);
-        rgb.b = source.b;
-        return vec4(rgb, source.a);
+        rgb.r = mix(sourceRGB.r, redScattered.r, redScatter);
+        rgb.g = mix(sourceRGB.g, greenScattered.g, greenScatter);
+        rgb.b = sourceRGB.b;
+        return vec4(rgb * source.a, source.a);
     }
     """#
 
@@ -1202,7 +1289,8 @@ private extension FilmRenderer {
         __sample wideBlur,
         float amount,
         float shadowProtection,
-        float detail
+        float detail,
+        float preserveHDR
     ) {
         const vec3 luma = vec3(0.2627002, 0.6779981, 0.0593017);
         float sourceAlpha = source.a;
@@ -1272,7 +1360,10 @@ private extension FilmRenderer {
         float minimum = min(rgb.r, min(rgb.g, rgb.b));
         float maximum = max(rgb.r, max(rgb.g, rgb.b));
         float lowScale = minimum < 0.0 ? outputY / max(outputY - minimum, 0.000001) : 1.0;
-        float availableHighlight = max(1.08 - outputY, 0.0);
+        // HDR has no SDR display-white ceiling. Keep the existing SDR gamut
+        // compression but don't turn extended colored highlights into gray.
+        float availableHighlight = preserveHDR > 0.5
+            ? max(maximum - outputY, 0.0) : max(1.08 - outputY, 0.0);
         float colorExcursion = max(maximum - outputY, 0.0);
         float highScale = colorExcursion > availableHighlight
             ? availableHighlight / max(colorExcursion, 0.000001)

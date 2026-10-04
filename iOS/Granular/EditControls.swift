@@ -195,6 +195,7 @@ private struct StockTile: View {
                     Rectangle().fill(.quaternary)
                     if let thumbnail {
                         Image(decorative: thumbnail, scale: 1)
+                            .allowedDynamicRange(.high)
                             .resizable()
                             .scaledToFill()
                             .transition(.opacity)

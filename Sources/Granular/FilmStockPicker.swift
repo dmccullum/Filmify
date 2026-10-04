@@ -134,6 +134,7 @@ private struct FilmStockTile: View {
                         .fill(.quaternary)
                     if let thumbnail {
                         Image(nsImage: thumbnail)
+                            .allowedDynamicRange(.high)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .transition(.opacity)

@@ -89,7 +89,9 @@ final class Editor {
         original = nil
         saveState = .idle
         Task {
-            let image = await Darkroom.thumbnail(of: url, maxPixelSize: Int(displayDimension))
+            let image = await Darkroom.thumbnail(
+                of: url, maxPixelSize: Int(displayDimension), highDynamicRange: previewsHDR(url)
+            )
             guard sourceURL == url else { return }
             original = image
         }
@@ -98,6 +100,12 @@ final class Editor {
     }
 
     // MARK: Previews
+
+    /// Whether the photo previews in HDR: only when the saved photo keeps HDR
+    /// and the screen can show it. Otherwise the preview is the SDR rendition.
+    private func previewsHDR(_ url: URL) -> Bool {
+        OutputOptions().preservesHDR(for: url) && Darkroom.screenSupportsHDR
+    }
 
     /// One render at a time; changes made while it runs are picked up as soon
     /// as it finishes, so a dragged slider never queues up stale renders.
@@ -148,7 +156,8 @@ final class Editor {
                     sourceURL: sourceURL,
                     recipe: darkroom.recipe,
                     maximumDimension: dimension,
-                    grainDimension: displayDimension
+                    grainDimension: displayDimension,
+                    highDynamicRange: previewsHDR(sourceURL)
                 )
                 guard !Task.isCancelled else { return }
                 preview = image
@@ -200,7 +209,9 @@ final class Editor {
         var tone = darkroom.recipe.tone
         tone.isEnabled = true
         tone.stock = .none
-        let key = StockThumbnailKey(sourceURL: sourceURL, tone: tone)
+        let key = StockThumbnailKey(
+            sourceURL: sourceURL, tone: tone, highDynamicRange: sourceURL.map(previewsHDR) ?? false
+        )
         guard key != stockKey else { return }
         if stockKey?.sourceURL != key.sourceURL {
             stockThumbnails = [:]
@@ -218,7 +229,8 @@ final class Editor {
                     sourceURL: key.sourceURL,
                     tone: tone,
                     stock: stock,
-                    maximumPixelSize: Self.stockThumbnailSize
+                    maximumPixelSize: Self.stockThumbnailSize,
+                    highDynamicRange: key.highDynamicRange
                 ), !Task.isCancelled else { continue }
                 stockThumbnails[stock] = image
             }
@@ -275,6 +287,7 @@ final class Editor {
 private struct StockThumbnailKey: Equatable {
     let sourceURL: URL?
     let tone: FilmToneSettings
+    let highDynamicRange: Bool
 }
 
 enum EditorFailure: Identifiable, Equatable {

@@ -439,7 +439,7 @@ final class Darkroom {
             try FileManager.default.moveItem(at: picked.url, to: source)
             try? FileManager.default.removeItem(at: picked.url.deletingLastPathComponent())
             update(job.id) { $0.sourceURL = source }
-            thumbnails[job.id] = await Self.thumbnail(of: source)
+            thumbnails[job.id] = await Self.thumbnail(of: source, highDynamicRange: Self.screenSupportsHDR)
 
             let output = try await service.process(
                 sourceURL: source,
@@ -448,7 +448,8 @@ final class Darkroom {
                 options: OutputOptions()
             )
             try? FileManager.default.removeItem(at: source)
-            thumbnails[job.id] = await Self.thumbnail(of: output) ?? thumbnails[job.id]
+            thumbnails[job.id] = await Self.thumbnail(of: output, highDynamicRange: Self.screenSupportsHDR)
+                ?? thumbnails[job.id]
             update(job.id) { $0.state = .finished(output) }
             batch?.recordSuccess(output: output)
             exposures += 1
@@ -503,16 +504,22 @@ final class Darkroom {
         jobs = Array(jobs.prefix(Self.keptFrames)) + jobs.dropFirst(Self.keptFrames).filter(\.isUnsaved)
     }
 
-    nonisolated static func thumbnail(of url: URL, maxPixelSize: Int = 720) async -> CGImage? {
+    nonisolated static func thumbnail(
+        of url: URL, maxPixelSize: Int = 720, highDynamicRange: Bool
+    ) async -> CGImage? {
         await Task.detached(priority: .userInitiated) {
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-            ]
-            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            try? ImageExporter().thumbnail(
+                at: url, maximumDimension: CGFloat(maxPixelSize), highDynamicRange: highDynamicRange
+            )
         }.value
+    }
+
+    /// Whether the screen can show HDR at all. Where it can't, HDR images only
+    /// cost memory and show the system's tone mapping instead of the SDR image.
+    static var screenSupportsHDR: Bool {
+        let screen = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.screen }.first
+        return (screen?.potentialEDRHeadroom ?? 1) > 1
     }
 }
 

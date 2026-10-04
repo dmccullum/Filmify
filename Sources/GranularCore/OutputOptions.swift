@@ -47,6 +47,9 @@ public struct OutputOptions: Codable, Hashable, Sendable {
     public var format: OutputFormat
     public var compressionQuality: Double
     public var stripLocationMetadata: Bool
+    /// HEIC and JPEG output keep an HDR source's HDR, as an SDR image plus an
+    /// ISO gain map. Other formats carry the SDR image alone.
+    public var preserveHDR: Bool
     /// How output files are named; see `OutputNaming`. Empty means the default.
     public var filenameTemplate: String
     /// The size, in pixels, images are scaled down to along their longer edge.
@@ -60,7 +63,8 @@ public struct OutputOptions: Codable, Hashable, Sendable {
         stripLocationMetadata: Bool = true,
         filenameTemplate: String = OutputNaming.defaultTemplate,
         resizeLongEdge: Int? = nil,
-        colorSpace: OutputColorSpace = .keepSource
+        colorSpace: OutputColorSpace = .keepSource,
+        preserveHDR: Bool = true
     ) {
         self.format = format
         self.compressionQuality = compressionQuality
@@ -68,6 +72,7 @@ public struct OutputOptions: Codable, Hashable, Sendable {
         self.filenameTemplate = filenameTemplate
         self.resizeLongEdge = resizeLongEdge
         self.colorSpace = colorSpace
+        self.preserveHDR = preserveHDR
     }
 
     // Options saved before naming, resizing and color space existed still load.
@@ -80,6 +85,7 @@ public struct OutputOptions: Codable, Hashable, Sendable {
             ?? OutputNaming.defaultTemplate
         resizeLongEdge = try container.decodeIfPresent(Int.self, forKey: .resizeLongEdge)
         colorSpace = try container.decodeIfPresent(OutputColorSpace.self, forKey: .colorSpace) ?? .keepSource
+        preserveHDR = try container.decodeIfPresent(Bool.self, forKey: .preserveHDR) ?? true
     }
 
     /// The pixel size an image of `size` is exported at, or nil if it keeps its size.
@@ -92,5 +98,24 @@ public struct OutputOptions: Codable, Hashable, Sendable {
             width: max(1, (size.width * scale).rounded()),
             height: max(1, (size.height * scale).rounded())
         )
+    }
+
+    /// The format a file from `sourceURL` is written in.
+    public func resolvedFormat(for sourceURL: URL) -> OutputFormat {
+        guard format == .sameAsSource else { return format }
+        return switch sourceURL.pathExtension.lowercased() {
+        // WebP can’t be written, so it comes out as JPEG; AVIF as HEIC, its nearest kin.
+        case "jpg", "jpeg", "webp": .jpeg
+        case "heic", "heif", "avif": .heic
+        case "png": .png
+        case "tif", "tiff": .tiff
+        default: .tiff
+        }
+    }
+
+    /// Whether an HDR photo from `sourceURL` keeps its HDR. Only HEIC and JPEG
+    /// carry the gain map it's written with.
+    public func preservesHDR(for sourceURL: URL) -> Bool {
+        preserveHDR && [.heic, .jpeg].contains(resolvedFormat(for: sourceURL))
     }
 }

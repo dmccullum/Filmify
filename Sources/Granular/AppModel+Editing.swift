@@ -86,6 +86,7 @@ extension AppModel {
         cancelPreviewRendering()
         selectedSourceURL = url
         sourcePreview = image
+        loadHDRSourcePreview(url)
         sourceInfo = EditorSourceInfo(url: url)
         processedPreview = nil
         showOriginal = false
@@ -98,6 +99,39 @@ extension AppModel {
         statusMessage = "Rendering preview…"
         schedulePreview()
         return true
+    }
+
+    /// Whether the open image previews in HDR: only when its export keeps HDR
+    /// and the screen can show it. Otherwise the preview is the SDR rendition
+    /// the file is saved with, not the system's tone mapping of an HDR one.
+    func previewsHDR(_ url: URL) -> Bool {
+        outputOptions.preservesHDR(for: url) && Self.screenSupportsHDR
+    }
+
+    static var screenSupportsHDR: Bool {
+        (NSScreen.main?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1) > 1
+    }
+
+    /// Replaces the original with its HDR rendition, when the edit previews in HDR.
+    private func loadHDRSourcePreview(_ url: URL) {
+        guard previewsHDR(url) else { return }
+        Task {
+            let preview = await FilmThumbnail.load(url, maxPixelSize: 2_400, highDynamicRange: true)
+            guard selectedSourceURL == url, previewsHDR(url), let preview else { return }
+            sourcePreview = NSImage(cgImage: preview.image, size: .zero)
+        }
+    }
+
+    /// Shows the open image again in the dynamic range it now previews in.
+    func dynamicRangeDidChange() {
+        guard let url = selectedSourceURL else { return }
+        if previewsHDR(url) {
+            loadHDRSourcePreview(url)
+        } else if let image = NSImage(contentsOf: url) {
+            sourcePreview = image
+        }
+        schedulePreview()
+        refreshStockThumbnails()
     }
 
     func closeEditorImage() {
@@ -245,7 +279,8 @@ extension AppModel {
                     sourceURL: sourceURL,
                     recipe: recipe,
                     maximumDimension: dimension,
-                    grainDimension: previewShowsGrain ? previewDisplayDimension : nil
+                    grainDimension: previewShowsGrain ? previewDisplayDimension : nil,
+                    highDynamicRange: previewsHDR(sourceURL)
                 )
                 guard !Task.isCancelled else { return }
                 processedPreview = NSImage(cgImage: image, size: .zero)
@@ -289,7 +324,11 @@ extension AppModel {
         var tone = recipe.tone
         tone.isEnabled = true
         tone.stock = .none
-        let key = StockThumbnailKey(sourceURL: selectedSourceURL, tone: tone)
+        let key = StockThumbnailKey(
+            sourceURL: selectedSourceURL,
+            tone: tone,
+            highDynamicRange: selectedSourceURL.map(previewsHDR) ?? false
+        )
         guard key != stockThumbnailKey else { return }
 
         if stockThumbnailKey?.sourceURL != key.sourceURL {
@@ -308,7 +347,8 @@ extension AppModel {
                     sourceURL: key.sourceURL,
                     tone: tone,
                     stock: stock,
-                    maximumPixelSize: Self.stockThumbnailPixelSize
+                    maximumPixelSize: Self.stockThumbnailPixelSize,
+                    highDynamicRange: key.highDynamicRange
                 ), !Task.isCancelled else { continue }
                 stockThumbnails[stock] = NSImage(cgImage: image, size: .zero)
             }
