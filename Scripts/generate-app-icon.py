@@ -52,8 +52,8 @@ FILM_T, FILM_R = 136, 952   # the film leader's top edge (mirrored at the bottom
 # The whole canister and leader are drawn on a board as wide as the leader and as tall as the canister, then scaled into the
 # middle of Apple's icon grid so they keep its margins on every side.
 ART_W, ART_H = FILM_R, CAN_H
-SCALE = 0.78
-NUDGE = 20              # the canister outweighs the leader, so the art sits a little right of centre
+SCALE = 0.773
+NUDGE = 16              # the canister outweighs the leader, so the art sits a little right of centre
 OFFSET = ((1024 - ART_W * SCALE) / 2 + NUDGE, (1024 - ART_H * SCALE) / 2)
 
 def rgb(h): h = h.lstrip("#"); return [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
