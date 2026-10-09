@@ -2,9 +2,9 @@
 """Generates AppIcon.icon, Granular's Icon Composer icon.
 
 A 35mm film canister stands in the left of the icon, seen straight on, with its film
-leader coming out of the light-trap lip. The canister runs off the icon's left, top and
-bottom edges, so the icon's own shape trims it, and its caps are as thin as a real
-tin's. Its lighting is computed from a cylinder so it reads round, the background is
+leader coming out of the light-trap lip. The canister runs off the icon's left edge, so
+the icon's own shape trims it, with room above and below its caps, which are as thin as
+a real tin's. Its lighting is computed from a cylinder so it reads round, the background is
 aluminum in light mode and magnesium in dark, and Clear/Tinted use their own
 high-contrast monochrome artwork.
 
@@ -42,13 +42,14 @@ def rrect(x, y, w, h, r):
 
 OUT = os.environ.get("ICON_OUT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AppIcon.icon")
 # Proportions follow a real 35mm canister, which stands 600 wide in the icon's left side.
-BODY_R = 600            # canister's right edge; its left, top and bottom run off the icon
+BODY_R = 600            # canister's right edge; its left runs off the icon
+CAN_T = 72              # the canister's top (mirrored at the bottom), so its caps stand clear of the edges
 CAP_H = 58              # the thin top and bottom caps
 CAP_CORNER = 24         # the caps' outer corners down the right side
 INSET = 12              # the label sits just inside the caps
 LIP_W = 58              # the velvet light-trap lip runs down the canister's right side
 PANEL_R, RED_W = 330, 80    # label: a yellow panel, a red stripe, then the black face (as in the app)
-FILM_T, FILM_R = 150, 952   # the film leader's top edge (mirrored at the bottom) and its right end
+FILM_T, FILM_R = 196, 904   # the film leader's top edge (mirrored at the bottom) and its right end
 SHIFT = 40              # everything slides this far left, for a little more room past the leader's end
 
 def rgb(h): h = h.lstrip("#"); return [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
@@ -116,7 +117,7 @@ MONO = {
 
 def outline(right):
     """The canister's silhouette: square on the left (the icon trims it), rounded caps on the right."""
-    return rrect(-80, 0, right + 80, 1024, CAP_CORNER)
+    return rrect(-80, CAN_T, right + 80, 1024 - 2 * CAN_T, CAP_CORNER)
 
 def body_svg(P):
     defs = ('<clipPath id="b"><path d="%s"/></clipPath>' % outline(BODY_R - INSET)
@@ -134,7 +135,7 @@ def body_svg(P):
     # A rim light down the canister's shaded side, so it reads round rather than flat.
     rim = '<rect x="%s" y="-80" width="44" height="1200" fill="url(#rim)"/>' % (x - 44)
     # The top cap stands proud of the label and shades it.
-    shade = '<rect x="-80" y="%s" width="%s" height="42" fill="url(#sh)"/>' % (CAP_H - 2, BODY_R + 80)
+    shade = '<rect x="-80" y="%s" width="%s" height="42" fill="url(#sh)"/>' % (CAN_T + CAP_H - 2, BODY_R + 80)
     defs += ('<linearGradient id="ls" gradientUnits="userSpaceOnUse" x1="%s" y1="0" x2="%s" y2="0">'
              '<stop offset="0" stop-color="#000" stop-opacity="0.35"/><stop offset="0.25" stop-color="#fff" stop-opacity="0.06"/>'
              '<stop offset="1" stop-color="#000" stop-opacity="0.7"/></linearGradient>'
@@ -164,17 +165,17 @@ def cap_svg(P):
     defs = ('<clipPath id="o"><path d="%s"/></clipPath>' % outline(BODY_R) + metal +
             '<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.10"/>'
             '<stop offset="1" stop-color="#000" stop-opacity="0.35"/></linearGradient>')
-    top, bottom = 1024 - CAP_H, 1104
+    top, bottom = 1024 - CAN_T - CAP_H, 1104
     body = ('<g clip-path="url(#o)">'
             '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#m)"/>'
             '%s'
             '<rect x="-80" y="%s" width="%s" height="%s" fill="url(#m)"/>'
             '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.22"/>'
             '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.14"/></g>'
-            % (BODY_R + 80, CAP_H + 80,
-               "" if "chrome" in P else '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#v)"/>' % (BODY_R + 80, CAP_H + 80),
+            % (BODY_R + 80, CAN_T + CAP_H + 80,
+               "" if "chrome" in P else '<rect x="-80" y="%s" width="%s" height="%s" fill="url(#v)"/>' % (CAN_T, BODY_R + 80, CAP_H),
                top, BODY_R + 80, bottom - top,
-               CAP_H - 5, BODY_R + 80, top + 1, BODY_R + 80))
+               CAN_T + CAP_H - 5, BODY_R + 80, top + 1, BODY_R + 80))
     return svg(defs, body)
 
 def film_svg(P):
