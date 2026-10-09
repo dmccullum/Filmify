@@ -41,20 +41,20 @@ def rrect(x, y, w, h, r):
 
 OUT = os.environ.get("ICON_OUT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AppIcon.icon")
 # Proportions follow a real 35mm canister, which stands 600 wide in the icon's left side.
-BODY_R = 600            # canister's right edge; its left edge is at 0
+BODY_R = 560            # canister's right edge; its left edge is at 0
 CAP_H = 58              # the thin top and bottom caps
 CAP_CORNER = 24         # the caps' outer corners down the right side
 INSET = 12              # the label sits just inside the caps
 LIP_W = 58              # the velvet light-trap lip runs down the canister's right side
-PANEL_R, RED_W = 330, 80    # label: a yellow panel, a red stripe, then the black face (as in the app)
-CAN_H = 860             # the canister's height, caps included: shorter than the board, for room in the corners
+PANEL_R, RED_W = 308, 76    # label: a yellow panel, a red stripe, then the black face (as in the app)
+CAN_H = 920             # the canister's height, caps included: shorter than the board, for room in the corners
 HUB_W, HUB_H = 200, 34  # the spool's hub, standing out of the bottom cap
-FILM_T, FILM_R = 136, 952   # the film leader's top edge (mirrored at the bottom) and its right end
+FILM_T, FILM_R = 136, 912   # the film leader's top edge (mirrored at the bottom) and its right end
 # The whole canister and leader are drawn on a board as wide as the leader and as tall as the canister, then scaled into the
 # middle of Apple's icon grid so they keep its margins on every side.
 ART_W, ART_H = FILM_R, CAN_H     # centred on the canister alone; the hub hangs below
 SCALE = 0.773
-NUDGE = 16              # the canister outweighs the leader, so the art sits a little right of centre
+NUDGE = 8               # the canister outweighs the leader, so the art sits a little right of centre
 OFFSET = ((1024 - ART_W * SCALE) / 2 + NUDGE, (1024 - ART_H * SCALE) / 2)
 
 def rgb(h): h = h.lstrip("#"); return [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
