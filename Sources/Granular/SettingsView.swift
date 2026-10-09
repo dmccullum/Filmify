@@ -121,6 +121,7 @@ private struct OutputSettings: View {
                 }
 
                 Toggle("Remove GPS location metadata", isOn: $model.outputOptions.stripLocationMetadata)
+                Toggle("Preserve HDR", isOn: $model.outputOptions.preserveHDR)
             }
 
             Section("Size and Color") {

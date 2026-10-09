@@ -12,22 +12,29 @@ public actor ImageProcessingService {
         exporter = ImageExporter()
     }
 
+    /// With `highDynamicRange`, an HDR photo previews as its HDR rendition;
+    /// otherwise as the SDR rendition every export carries.
     public func renderPreview(
         sourceURL: URL,
         recipe: FilmRecipe,
         maximumDimension: CGFloat = 1_600,
-        grainDimension: CGFloat? = nil
+        grainDimension: CGFloat? = nil,
+        highDynamicRange: Bool = false
     ) throws -> CGImage {
-        let (source, fullSize) = try previewSource(for: sourceURL, maximumDimension: maximumDimension)
+        let source = try previewSource(
+            for: sourceURL, maximumDimension: maximumDimension, highDynamicRange: highDynamicRange
+        )
         let rendered = try renderer.render(
-            source,
+            source.sdr,
+            hdr: source.hdr,
             recipe: recipe,
             previewMaximumDimension: maximumDimension,
             grainDimension: grainDimension,
-            fullSize: fullSize
+            fullSize: source.fullSize
         )
         return try exporter.previewImage(
-            for: rendered, maximumDimension: max(maximumDimension, grainDimension ?? 0)
+            for: rendered, maximumDimension: max(maximumDimension, grainDimension ?? 0),
+            highDynamicRange: source.hdr != nil
         )
     }
 
@@ -36,34 +43,63 @@ public actor ImageProcessingService {
     /// A couple of sizes are kept, so a quick preview while adjusting and a
     /// sharper one for a zoomed-in view don't decode the file in turn.
     private func previewSource(
-        for url: URL, maximumDimension: CGFloat
-    ) throws -> (image: CIImage, fullSize: CGSize) {
+        for url: URL, maximumDimension: CGFloat, highDynamicRange: Bool
+    ) throws -> PreviewSource {
         if previewSourceURL != url {
             previewSourceURL = url
             previewSources = []
         }
-        if let index = previewSources.firstIndex(where: { $0.maximumDimension == maximumDimension }) {
+        if let index = previewSources.firstIndex(where: {
+            $0.maximumDimension == maximumDimension && $0.highDynamicRange == highDynamicRange
+        }) {
             let cached = previewSources.remove(at: index)
             previewSources.append(cached)
-            return (cached.image, cached.fullSize)
+            return cached
         }
-        let source = try renderer.loadImage(at: url)
-        let scale = min(1, maximumDimension / max(source.extent.width, source.extent.height))
-        let scaled = scale < 1
-            ? source.samplingLinear()
-                .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            : source
-        let image = try exporter.materialize(scaled)
-        previewSources.append((maximumDimension, image, source.extent.integral.size))
+        let sdr = try renderer.loadImage(at: url)
+        let hdr = highDynamicRange ? try loadHDR(at: url, matching: sdr) : nil
+        let scale = min(1, maximumDimension / max(sdr.extent.width, sdr.extent.height))
+        func shrunk(_ image: CIImage) throws -> CIImage {
+            try exporter.materialize(scale < 1
+                ? image.samplingLinear().transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                : image)
+        }
+        let source = PreviewSource(
+            maximumDimension: maximumDimension,
+            highDynamicRange: highDynamicRange,
+            sdr: try shrunk(sdr),
+            hdr: try hdr.map(shrunk),
+            fullSize: sdr.extent.integral.size
+        )
+        previewSources.append(source)
         if previewSources.count > 2 {
             previewSources.removeFirst()
         }
-        return (image, source.extent.integral.size)
+        return source
+    }
+
+    /// The open image at one preview size. An HDR photo previewed in HDR keeps
+    /// both renditions, since the HDR edit is made from the SDR one.
+    private struct PreviewSource {
+        let maximumDimension: CGFloat
+        let highDynamicRange: Bool
+        let sdr: CIImage
+        let hdr: CIImage?
+        let fullSize: CGSize
     }
 
     private var previewSourceURL: URL?
     /// Least recently used first.
-    private var previewSources: [(maximumDimension: CGFloat, image: CIImage, fullSize: CGSize)] = []
+    private var previewSources: [PreviewSource] = []
+
+    /// The photo's HDR rendition, or nil when it has none to keep. SDR files
+    /// are recognized from their metadata, without decoding them again.
+    private func loadHDR(at url: URL, matching sdr: CIImage) throws -> CIImage? {
+        guard exporter.hasHDRContent(at: url) else { return nil }
+        let hdr = try exporter.resolvingHeadroom(renderer.loadImage(at: url, expandToHDR: true))
+        guard hdr.contentHeadroom > 1, hdr.extent.integral == sdr.extent.integral else { return nil }
+        return hdr
+    }
 
     /// Renders a small Film Tone preview of one stock for the stock picker. With
     /// no source image, a generated color swatch stands in.
@@ -71,41 +107,49 @@ public actor ImageProcessingService {
         sourceURL: URL?,
         tone: FilmToneSettings,
         stock: FilmStockID,
-        maximumPixelSize: Int = 192
+        maximumPixelSize: Int = 192,
+        highDynamicRange: Bool = false
     ) throws -> CGImage {
-        let source = try thumbnailSource(for: sourceURL, maximumPixelSize: maximumPixelSize)
+        let source = try thumbnailSource(
+            for: sourceURL, maximumPixelSize: maximumPixelSize, highDynamicRange: highDynamicRange
+        )
         var settings = tone
         settings.isEnabled = true
         settings.stock = stock
-        let rendered = try renderer.renderFilmTone(source, tone: settings)
-        return try exporter.previewImage(for: rendered, maximumDimension: CGFloat(maximumPixelSize))
+        let rendered = try renderer.renderFilmTone(source.sdr, tone: settings, hdr: source.hdr)
+        return try exporter.previewImage(for: rendered, maximumDimension: CGFloat(maximumPixelSize),
+                                        highDynamicRange: source.hdr != nil)
     }
 
-    private func thumbnailSource(for url: URL?, maximumPixelSize: Int) throws -> CIImage {
+    private func thumbnailSource(
+        for url: URL?, maximumPixelSize: Int, highDynamicRange: Bool
+    ) throws -> (sdr: CIImage, hdr: CIImage?) {
         if let cached = thumbnailSourceCache,
            cached.url == url,
-           cached.maximumPixelSize == maximumPixelSize {
-            return cached.image
+           cached.maximumPixelSize == maximumPixelSize,
+           cached.highDynamicRange == highDynamicRange {
+            return (cached.sdr, cached.hdr)
         }
-        let image: CIImage
+        let sdr: CIImage
+        var hdr: CIImage?
         if let url {
-            guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, [
-                      kCGImageSourceCreateThumbnailFromImageAlways: true,
-                      kCGImageSourceCreateThumbnailWithTransform: true,
-                      kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize
-                  ] as CFDictionary) else {
-                throw FilmRendererError.imageLoadFailed(url)
+            let size = CGFloat(maximumPixelSize)
+            sdr = CIImage(cgImage: try exporter.thumbnail(at: url, maximumDimension: size))
+            if highDynamicRange, exporter.hasHDRContent(at: url) {
+                let image = try exporter.resolvingHeadroom(CIImage(cgImage:
+                    try exporter.thumbnail(at: url, maximumDimension: size, highDynamicRange: true)))
+                if image.contentHeadroom > 1, image.extent == sdr.extent { hdr = image }
             }
-            image = CIImage(cgImage: thumbnail)
         } else {
-            image = Self.colorSwatch(width: maximumPixelSize, height: maximumPixelSize * 2 / 3)
+            sdr = Self.colorSwatch(width: maximumPixelSize, height: maximumPixelSize * 2 / 3)
         }
-        thumbnailSourceCache = (url, maximumPixelSize, image)
-        return image
+        thumbnailSourceCache = (url, maximumPixelSize, highDynamicRange, sdr, hdr)
+        return (sdr, hdr)
     }
 
-    private var thumbnailSourceCache: (url: URL?, maximumPixelSize: Int, image: CIImage)?
+    private var thumbnailSourceCache: (
+        url: URL?, maximumPixelSize: Int, highDynamicRange: Bool, sdr: CIImage, hdr: CIImage?
+    )?
 
     /// Skin, foliage, sky and saturated primaries over a gray ramp: enough to
     /// show a stock's color and tone character without a photograph.
@@ -149,8 +193,10 @@ public actor ImageProcessingService {
     ) throws -> URL {
         let source = try renderer.loadImage(at: sourceURL)
         let rendered = try renderer.render(source, recipe: recipe)
+        let hdr = try renderHDR(source, sourceURL: sourceURL, recipe: recipe, options: options)
         return try exporter.export(
             image: rendered,
+            hdrImage: hdr,
             sourceURL: sourceURL,
             destinationFolder: destinationFolder,
             recipeName: recipe.name,
@@ -166,12 +212,23 @@ public actor ImageProcessingService {
     ) throws -> URL {
         let source = try renderer.loadImage(at: sourceURL)
         let rendered = try renderer.render(source, recipe: recipe)
+        let hdr = try renderHDR(source, sourceURL: sourceURL, recipe: recipe, options: options)
         return try exporter.export(
             image: rendered,
+            hdrImage: hdr,
             sourceURL: sourceURL,
             destinationFolder: destinationURL.deletingLastPathComponent(),
             destinationURL: destinationURL,
             options: options
         )
+    }
+
+    /// The edit's HDR rendition, when the photo has one and the output keeps it.
+    private func renderHDR(
+        _ source: CIImage, sourceURL: URL, recipe: FilmRecipe, options: OutputOptions
+    ) throws -> CIImage? {
+        guard options.preservesHDR(for: sourceURL),
+              let hdr = try loadHDR(at: sourceURL, matching: source) else { return nil }
+        return try renderer.render(source, hdr: hdr, recipe: recipe)
     }
 }

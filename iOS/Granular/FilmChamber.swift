@@ -527,6 +527,7 @@ private struct NegativeImage: View {
         Color.clear
             .overlay {
                 Image(decorative: image, scale: 1)
+                    .allowedDynamicRange(.high)
                     .resizable()
                     .scaledToFill()
             }
@@ -754,6 +755,7 @@ private struct ExposureBurn: View {
                 Color.clear
                     .overlay {
                         Image(decorative: image, scale: 1)
+                            .allowedDynamicRange(.high)
                             .resizable()
                             .scaledToFill()
                     }

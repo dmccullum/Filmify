@@ -51,6 +51,7 @@ enum JobState: Equatable {
 struct StockThumbnailKey: Equatable {
     let sourceURL: URL?
     let tone: FilmToneSettings
+    let highDynamicRange: Bool
 }
 
 struct ProcessingJob: Identifiable {
@@ -133,7 +134,14 @@ final class AppModel {
     // MARK: Settings & window state
     // Keep each area's new stored state under its own mark.
     var outputOptions = OutputOptions() {
-        didSet { if outputOptions != oldValue { saveOutputOptions() } }
+        didSet {
+            guard outputOptions != oldValue else { return }
+            saveOutputOptions()
+            if let url = selectedSourceURL,
+               outputOptions.preservesHDR(for: url) != oldValue.preservesHDR(for: url) {
+                dynamicRangeDidChange()
+            }
+        }
     }
     var opensInLastUsedMode = false {
         didSet { UserDefaults.standard.set(opensInLastUsedMode, forKey: SettingsKey.opensInLastUsedMode) }

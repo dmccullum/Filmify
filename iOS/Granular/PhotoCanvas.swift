@@ -61,6 +61,7 @@ final class PhotoScrollView: UIScrollView, UIScrollViewDelegate {
         bouncesZoom = true
         backgroundColor = .clear
         imageView.contentMode = .scaleAspectFit
+        imageView.preferredImageDynamicRange = .high
         imageView.isAccessibilityElement = true
         imageView.accessibilityLabel = "Photo"
         addSubview(imageView)

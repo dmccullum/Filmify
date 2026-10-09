@@ -295,7 +295,8 @@ struct DropModeView: View {
         roll.loading.insert(jobID)
         Task {
             defer { roll.loading.remove(jobID) }
-            guard let thumbnail = await FilmThumbnail.load(url) else { return }
+            let thumbnail = await FilmThumbnail.load(url, highDynamicRange: AppModel.screenSupportsHDR)
+            guard let thumbnail else { return }
             let visible = Set(model.jobs.prefix(6).map(\.id)).union(exposedFrames.map(\.id))
             // One assignment, so the strip redraws once for the new thumbnail and the dropped ones.
             var thumbnails = roll.thumbnails
@@ -327,19 +328,17 @@ final class FilmRoll {
 struct FilmThumbnail: @unchecked Sendable {
     let image: CGImage
 
-    static func load(_ url: URL, maxPixelSize: Int = 720) async -> FilmThumbnail? {
+    static func load(
+        _ url: URL, maxPixelSize: Int = 720, highDynamicRange: Bool = false
+    ) async -> FilmThumbnail? {
         await Task.detached(priority: .userInitiated) {
             let gainedAccess = url.startAccessingSecurityScopedResource()
             defer {
                 if gainedAccess { url.stopAccessingSecurityScopedResource() }
             }
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-            ]
-            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            guard let image = try? ImageExporter().thumbnail(
+                at: url, maximumDimension: CGFloat(maxPixelSize), highDynamicRange: highDynamicRange
+            ) else {
                 return nil
             }
             return FilmThumbnail(image: image)
@@ -920,6 +919,7 @@ private struct NegativeImage: View {
         Color.clear
             .overlay {
                 Image(decorative: image, scale: 1)
+                    .allowedDynamicRange(.high)
                     .resizable()
                     .scaledToFill()
             }
@@ -1426,6 +1426,7 @@ private struct ExposureBurn: View {
                 Color.clear
                     .overlay {
                         Image(decorative: image, scale: 1)
+                            .allowedDynamicRange(.high)
                             .resizable()
                             .scaledToFill()
                     }

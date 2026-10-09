@@ -2,9 +2,8 @@
 """Generates AppIcon.icon, Granular's Icon Composer icon.
 
 A 35mm film canister stands in the left of the icon, seen straight on, with its film
-leader coming out of the light-trap lip. The canister runs off the icon's left, top and
-bottom edges, so the icon's own shape trims it, and its caps are as thin as a real
-tin's. Its lighting is computed from a cylinder so it reads round, the background is
+leader coming out of the light-trap lip. The whole canister shows, set within Apple's
+icon grid, and its caps are as thin as a real tin's. Its lighting is computed from a cylinder so it reads round, the background is
 aluminum in light mode and magnesium in dark, and Clear/Tinted use their own
 high-contrast monochrome artwork.
 
@@ -42,14 +41,20 @@ def rrect(x, y, w, h, r):
 
 OUT = os.environ.get("ICON_OUT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AppIcon.icon")
 # Proportions follow a real 35mm canister, which stands 600 wide in the icon's left side.
-BODY_R = 600            # canister's right edge; its left, top and bottom run off the icon
+BODY_R = 600            # canister's right edge; its left edge is at 0
 CAP_H = 58              # the thin top and bottom caps
 CAP_CORNER = 24         # the caps' outer corners down the right side
 INSET = 12              # the label sits just inside the caps
 LIP_W = 58              # the velvet light-trap lip runs down the canister's right side
 PANEL_R, RED_W = 330, 80    # label: a yellow panel, a red stripe, then the black face (as in the app)
-FILM_T, FILM_R = 150, 952   # the film leader's top edge (mirrored at the bottom) and its right end
-SHIFT = 40              # everything slides this far left, for a little more room past the leader's end
+CAN_H = 860             # the canister's height, caps included: shorter than the board, for room in the corners
+FILM_T, FILM_R = 136, 952   # the film leader's top edge (mirrored at the bottom) and its right end
+# The whole canister and leader are drawn on a board as wide as the leader and as tall as the canister, then scaled into the
+# middle of Apple's icon grid so they keep its margins on every side.
+ART_W, ART_H = FILM_R, CAN_H
+SCALE = 0.773
+NUDGE = 16              # the canister outweighs the leader, so the art sits a little right of centre
+OFFSET = ((1024 - ART_W * SCALE) / 2 + NUDGE, (1024 - ART_H * SCALE) / 2)
 
 def rgb(h): h = h.lstrip("#"); return [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
 def hexs(c): return "#%02x%02x%02x" % tuple(round(max(0, min(1, v)) * 255) for v in c)
@@ -84,8 +89,8 @@ def cylinder(gid, dark, base, light, x0=0, x1=BODY_R, steps=48, spec_scale=1.0, 
 
 def svg(defs, body):
     return ('<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" '
-            'viewBox="0 0 1024 1024"><defs>%s</defs><g transform="translate(%s,0)">%s</g></svg>\n'
-            % (defs, -SHIFT, body))
+            'viewBox="0 0 1024 1024"><defs>%s</defs><g transform="translate(%.2f,%.2f) scale(%s)">%s</g></svg>\n'
+            % (defs, OFFSET[0], OFFSET[1], SCALE, body))
 
 # Palettes: colour, and a high-contrast monochrome set for Clear and Tinted.
 COLOR = {
@@ -114,12 +119,12 @@ MONO = {
     "film": ("#FFFFFF", "#F6F6F6", "#ECECEC", "#E0E0E0"), "lip": "#000000", "edge": 0.0, "rim": 0.10,
 }
 
-def outline(right):
-    """The canister's silhouette: square on the left (the icon trims it), rounded caps on the right."""
-    return rrect(-80, 0, right + 80, 1024, CAP_CORNER)
+def outline(left, right):
+    """The canister's silhouette: with rounded caps at each corner."""
+    return rrect(left, 0, right - left, CAN_H, CAP_CORNER)
 
 def body_svg(P):
-    defs = ('<clipPath id="b"><path d="%s"/></clipPath>' % outline(BODY_R - INSET)
+    defs = ('<clipPath id="b"><path d="%s"/></clipPath>' % outline(INSET, BODY_R - INSET)
             + "".join(cylinder(k, *P[k], spec_shift=P.get("spec_shift", 0.0)) for k in ("yellow", "red", "black")))
     parts = [(-80, PANEL_R + 80, "yellow"), (PANEL_R, RED_W, "red"), (PANEL_R + RED_W, BODY_R, "black")]
     label = "".join('<rect x="%s" y="-80" width="%s" height="1200" fill="url(#%s)"/>' % (x, w, g) for x, w, g in parts)
@@ -161,10 +166,10 @@ def cap_svg(P):
                  % (BODY_R, stops))
     else:
         metal = cylinder("m", c[0], hexs(mix(rgb(c[0]), rgb(c[1]), 0.45)), c[1], spec_shift=P.get("spec_shift", 0.0))
-    defs = ('<clipPath id="o"><path d="%s"/></clipPath>' % outline(BODY_R) + metal +
+    defs = ('<clipPath id="o"><path d="%s"/></clipPath>' % outline(0, BODY_R) + metal +
             '<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.10"/>'
             '<stop offset="1" stop-color="#000" stop-opacity="0.35"/></linearGradient>')
-    top, bottom = 1024 - CAP_H, 1104
+    top, bottom = CAN_H - CAP_H, CAN_H + 80
     body = ('<g clip-path="url(#o)">'
             '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#m)"/>'
             '%s'
@@ -172,7 +177,7 @@ def cap_svg(P):
             '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.22"/>'
             '<rect x="-80" y="%s" width="%s" height="4" fill="#fff" fill-opacity="0.14"/></g>'
             % (BODY_R + 80, CAP_H + 80,
-               "" if "chrome" in P else '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#v)"/>' % (BODY_R + 80, CAP_H + 80),
+               "" if "chrome" in P else '<rect x="-80" y="0" width="%s" height="%s" fill="url(#v)"/>' % (BODY_R + 80, CAP_H),
                top, BODY_R + 80, bottom - top,
                CAP_H - 5, BODY_R + 80, top + 1, BODY_R + 80))
     return svg(defs, body)
@@ -181,7 +186,7 @@ def film_svg(P):
     """The leader, as tall as the label, cut to half height at its end. It's thin, so it
     draws its own crisp lit edge rather than taking Liquid Glass's bevel."""
     x0 = BODY_R - INSET - LIP_W - 10
-    t, b = FILM_T, 1024 - FILM_T
+    t, b = FILM_T, CAN_H - FILM_T
     tongue_b = t + (b - t) * 0.5
     xs, xe, rr = FILM_R - 182, FILM_R, 70
     d = ("M%s,%s H%s A%s,%s 0 0 1 %s,%s V%s A%s,%s 0 0 1 %s,%s H%s C%s,%s %s,%s %s,%s V%s H%s Z"

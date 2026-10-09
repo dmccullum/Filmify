@@ -486,6 +486,7 @@ private struct ViewerImage: View {
 
     var body: some View {
         Image(nsImage: image)
+            .allowedDynamicRange(.high)
             .resizable()
             .interpolation(.high)
             .frame(width: size.width, height: size.height)

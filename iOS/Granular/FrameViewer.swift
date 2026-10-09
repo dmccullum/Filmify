@@ -67,7 +67,9 @@ struct FrameViewer: View {
         }
         .preferredColorScheme(.dark)
         .task {
-            image = await Darkroom.thumbnail(of: url, maxPixelSize: 2_400)
+            image = await Darkroom.thumbnail(
+                of: url, maxPixelSize: 2_400, highDynamicRange: Darkroom.screenSupportsHDR
+            )
         }
         .onAppear {
             withAnimation(.spring(duration: 0.5, bounce: 0.12)) { isOpen = true }
@@ -98,6 +100,7 @@ struct FrameViewer: View {
             Group {
                 if let picture = image ?? negative {
                     Image(decorative: picture, scale: 1)
+                        .allowedDynamicRange(.high)
                         .resizable()
                         .scaledToFit()
                 } else {
