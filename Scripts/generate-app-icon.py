@@ -48,10 +48,11 @@ INSET = 12              # the label sits just inside the caps
 LIP_W = 58              # the velvet light-trap lip runs down the canister's right side
 PANEL_R, RED_W = 330, 80    # label: a yellow panel, a red stripe, then the black face (as in the app)
 CAN_H = 860             # the canister's height, caps included: shorter than the board, for room in the corners
+HUB_W, HUB_H = 200, 34  # the spool's hub, standing out of the bottom cap
 FILM_T, FILM_R = 136, 952   # the film leader's top edge (mirrored at the bottom) and its right end
 # The whole canister and leader are drawn on a board as wide as the leader and as tall as the canister, then scaled into the
 # middle of Apple's icon grid so they keep its margins on every side.
-ART_W, ART_H = FILM_R, CAN_H
+ART_W, ART_H = FILM_R, CAN_H     # centred on the canister alone; the hub hangs below
 SCALE = 0.773
 NUDGE = 16              # the canister outweighs the leader, so the art sits a little right of centre
 OFFSET = ((1024 - ART_W * SCALE) / 2 + NUDGE, (1024 - ART_H * SCALE) / 2)
@@ -170,7 +171,19 @@ def cap_svg(P):
             '<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.10"/>'
             '<stop offset="1" stop-color="#000" stop-opacity="0.35"/></linearGradient>')
     top, bottom = CAN_H - CAP_H, CAN_H + 80
-    body = ('<g clip-path="url(#o)">'
+    # The spool's hub stands out of the bottom cap, centred on the canister, lit as its own small cylinder.
+    hx = (BODY_R - HUB_W) / 2
+    # The hub is dark plastic even where the caps are chrome.
+    defs += cylinder("hub", c[0], hexs(mix(rgb(c[0]), rgb(c[1]), 0.45)), c[1], x0=hx, x1=hx + HUB_W)
+    # It sits behind the cap's rim, so it's darker than the cap and shaded deeply where it meets it.
+    shape = ('M%s,%s h%s v%s a12,12 0 0 1 -12,12 h%s a12,12 0 0 1 -12,-12 z'
+             % (hx, CAN_H - 2, HUB_W, HUB_H - 10, -(HUB_W - 24)))
+    hub = ('<path d="%s" fill="url(#hub)"/><path d="%s" fill="#000" fill-opacity="0.38"/>'
+           '<rect x="%s" y="%s" width="%s" height="18" fill="url(#hsh)"/>'
+           % (shape, shape, hx, CAN_H - 2, HUB_W))
+    defs += ('<linearGradient id="hsh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.7"/>'
+             '<stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>')
+    body = hub + ('<g clip-path="url(#o)">'
             '<rect x="-80" y="-80" width="%s" height="%s" fill="url(#m)"/>'
             '%s'
             '<rect x="-80" y="%s" width="%s" height="%s" fill="url(#m)"/>'
